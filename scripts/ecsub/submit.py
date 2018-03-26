@@ -1,0 +1,228 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Mar 14 13:06:19 2018
+
+@author: Okada
+"""
+
+import os
+import shutil
+from multiprocessing import Process
+import string
+import random
+import ecsub.aws
+
+def read_tasksfile(tasks_file):
+    
+    tasks = []
+    header = []
+
+    for line in open(tasks_file).readlines():
+        if header == []:
+            for item in line.rstrip("\n").split("\t"):
+                v = item.split(" ")
+                if v[0].lower() == "--env":
+                    header.append({"type": "env", "recursive": False, "name": v[1]})
+                elif v[0].lower() == "--input-recursive":
+                    header.append({"type": "input", "recursive": True, "name": v[1]})
+                elif v[0].lower() == "--input":
+                    header.append({"type": "input", "recursive": False, "name": v[1]})
+                elif v[0].lower() == "--output-recursive":
+                    header.append({"type": "output", "recursive": True, "name": v[1]})
+                elif v[0].lower() == "--output":
+                    header.append({"type": "output", "recursive": False, "name": v[1]})
+                else:
+                    print ("type %s is not support." % (v[0]))
+                    return None
+            continue
+        
+        tasks.append(line.rstrip("\n").split("\t"))
+    
+    return {"tasks": tasks, "header": header}
+
+
+def write_runsh(task_params, runsh):
+   
+    run_template = """#!/bin/bash
+set -x
+
+SCRIPT_ENVM_NAME=`basename ${{SCRIPT_ENVM_PATH}}`
+SCRIPT_EXEC_NAME=`basename ${{SCRIPT_EXEC_PATH}}`
+
+aws s3 cp ${{SCRIPT_ENVM_PATH}} /${{SCRIPT_ENVM_NAME}} --only-show-errors
+aws s3 cp ${{SCRIPT_EXEC_PATH}} /${{SCRIPT_EXEC_NAME}} --only-show-errors
+
+source /${{SCRIPT_ENVM_NAME}}
+
+df -h
+#<< COMMENTOUT
+{download_script}
+mkdir -p ${{OUTPUT_DIR}}
+
+# exec
+bash /${{SCRIPT_EXEC_NAME}}
+df -h
+
+# upload
+{upload_script}
+
+#COMMENTOUT
+"""
+
+    dw_text = ""
+    up_text = ""    
+    for i in range(len(task_params["header"])):
+        if task_params["header"][i]["type"] == "input":
+            cmd_template = "aws s3 cp --only-show-errors {r_option} $S3_{name} ${name}\n"
+            r_option = ""
+            if task_params["header"][i]["recursive"]:
+                r_option = "--recursive"
+            dw_text += cmd_template.format(
+                r_option = r_option,
+                name = task_params["header"][i]["name"])
+            
+        elif task_params["header"][i]["type"] == "output":
+            cmd_template = "aws s3 cp --only-show-errors {r_option} ${name} $S3_{name}\n"
+            r_option = ""
+            if task_params["header"][i]["recursive"]:
+                r_option = "--recursive"
+            up_text += cmd_template.format(
+                r_option = r_option,
+                name = task_params["header"][i]["name"])
+            
+    open(runsh, "w").write(run_template.format(
+        download_script = dw_text,
+        upload_script = up_text
+    ))
+    
+def write_setenv(task_params, setenv, no):
+   
+    f = open(setenv, "w")
+    
+    for i in range(len(task_params["tasks"][no])):
+        
+        if task_params["header"][i]["type"] == "input":
+            f.write('export S3_%s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i]))
+            f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i].replace("s3://", "/AWS_INPUT/")))
+        elif task_params["header"][i]["type"] == "output":
+            f.write('export S3_%s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i]))
+            f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i].replace("s3://", "/AWS_OUTPUT/")))
+        else:
+            f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i]))
+    f.close()
+
+def upload_scripts(task_params, aws_instance, local_root, s3_root, script):
+
+    runsh = local_root + "/run.sh"
+    s3_runsh = s3_root + "/run.sh"
+    write_runsh(task_params, runsh)
+    aws_instance.s3_copy(runsh, s3_runsh, False)
+
+    s3_setenv_list = []
+    for i in range(len(task_params["tasks"])):
+        setenv = local_root + "/setenv.%d.sh" % (i)
+        s3_setenv = s3_root + "/setenv.%d.sh" % (i)
+        write_setenv(task_params, setenv, i)
+        aws_instance.s3_copy(setenv, s3_setenv, False)
+        s3_setenv_list.append(s3_setenv)
+        
+    s3_script = s3_root + "/" + os.path.basename(script)
+    aws_instance.s3_copy(script, s3_script, False)
+    
+    aws_instance.set_s3files(s3_runsh, s3_script, s3_setenv_list)
+    
+    return True
+
+def submit_task(aws_instance, no):
+    
+    if aws_instance.run_instances(no):
+        instance_id = aws_instance.run_task(no)
+        if instance_id != None:
+            aws_instance.terminate_instances(no, instance_id)
+    
+def main(params):
+    
+    # read tasks file
+    task_params = read_tasksfile(params["tasks"])
+    if task_params == None:
+        return -1
+    
+    if task_params["tasks"] == []:
+        return 0
+        
+    params["cluster_name"] = os.path.splitext(os.path.basename(params["tasks"]))[0] \
+        + '-' \
+        + ''.join([random.choice(string.ascii_letters + string.digits) for i in range(5)])
+    subdir = params["cluster_name"]
+    
+    params["wdir"] = params["wdir"].rstrip("/") + "/" + subdir
+    params["aws_s3_bucket"] = params["aws_s3_bucket"].rstrip("/") + "/" + subdir
+    
+    if os.path.exists (params["wdir"]):
+        shutil.rmtree(params["wdir"])
+        print ("[%s] existing directory was deleted." % (params["wdir"]))
+    
+    os.makedirs(params["wdir"])
+    os.makedirs(params["wdir"] + "/log")
+    os.makedirs(params["wdir"] + "/conf")
+    os.makedirs(params["wdir"] + "/script")
+
+    aws_instance = ecsub.aws.Aws_ecsub_control(params)
+    
+    # check task-param
+    if aws_instance.check_inputfiles(task_params):
+
+        # tasts to scripts and upload S3    
+        upload_scripts(task_params, 
+                       aws_instance, 
+                       params["wdir"] + "/script", 
+                       params["aws_s3_bucket"].rstrip("/") + "/script",
+                       params["script"])
+        try:
+            # create-cluster
+            # register-task-definition
+            if aws_instance.create_cluster() and aws_instance.register_task_definition():
+    
+                # run instance and submit task
+                process_list = []
+                for i in range(len(task_params["tasks"])):
+                    process = Process(target=submit_task, name="%s_%03d" % (params["cluster_name"], i), args=(aws_instance, i))
+                    process.daemon == True
+                    process.start()
+                    process_list.append(process)
+                
+                for process in process_list:
+                    process.join()
+    
+            aws_instance.clean_up()    
+            return 0
+            
+        except Exception as e:
+            print (e)
+            aws_instance.clean_up()
+            
+        except KeyboardInterrupt:
+            aws_instance.clean_up()
+    
+    return 1
+    
+def entry_point(args):
+    
+    params = {
+        "wdir": args.wdir,
+        "image": args.image,
+        "script": args.script,
+        "tasks": args.tasks,
+        "aws_ec2_instance_type": args.aws_ec2_instance_type,
+        "aws_ec2_instance_disk_size": args.disk_size,
+        "aws_s3_bucket": args.aws_s3_bucket,
+        "aws_security_group_id": args.aws_security_group_id,
+        "aws_key_name": args.aws_key_name,
+        "set_cmd": "set -x",
+    }
+    return main(params)
+    
+if __name__ == "__main__":
+    pass
+    
+    
