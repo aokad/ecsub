@@ -13,6 +13,7 @@ import datetime
 import boto3
 import ecsub.ansi
 import ecsub.aws_config
+import ecsub.tools
 
 class Aws_ecsub_control:
 
@@ -67,34 +68,12 @@ class Aws_ecsub_control:
             if no != None:
                 line = ecsub.ansi.colors.paint("[%s:%03d]" % (self.cluster_name, no), ecsub.ansi.colors.roll_list[no % len(ecsub.ansi.colors.roll_list)]) + line
             else:
-                line = "[%s]" % (self.cluster_name) + line
+                line = ecsub.tools.info_message (self.cluster_name, None, line)
+                #line = "[%s]" % (self.cluster_name) + line
                 
             if len(line.rstrip()) > 0:
                 sys.stdout.write(line)
 
-    def _message (self, no, messages):
-        
-        text = "[%s]" % (self.cluster_name)
-        if no != None:     
-            text = ecsub.ansi.colors.paint("[%s:%03d]" % (self.cluster_name, no), ecsub.ansi.colors.roll_list[no % len(ecsub.ansi.colors.roll_list)])
-
-        for m in messages:
-            if "color" in m.keys():
-                text += ecsub.ansi.colors.paint(m["text"], m["color"])
-            else:
-                text += m["text"]
-
-        return text
-
-    def _warning_message (self, no, text):
-        return self._message (no, [{"text": " [WARNING] %s" % (text), "color": ecsub.ansi.colors.WARNING}])
-
-    def _error_message (self, no, text):
-        return self._message (no, [{"text": " [ERROR] %s" % (text), "color": ecsub.ansi.colors.FAIL}])
-
-    def _info_message (self, no, text):
-        return self._message (no, [{"text": " %s" % (text)}])
-        
     def check_inputfiles(self, tasks):
 
         for task in tasks["tasks"]:
@@ -107,7 +86,7 @@ class Aws_ecsub_control:
                 responce = self._subprocess_communicate(cmd)
 
                 if responce == "":
-                    print(self._error_message (None, "s3-path '%s' is invalid." % (task[i])))
+                    print(ecsub.tools.error_message (self.cluster_name, None, "s3-path '%s' is invalid." % (task[i])))
                     return False
 
                 find = False
@@ -116,7 +95,7 @@ class Aws_ecsub_control:
                         find = True
                         break
                 if find == False:
-                    print(self._error_message (None, "s3-path '%s' is invalid." % (task[i])))
+                    print(ecsub.tools.error_message (self.cluster_name, None, "s3-path '%s' is invalid." % (task[i])))
                     return False
         return True
 
@@ -160,7 +139,7 @@ class Aws_ecsub_control:
         try:
             obj = json.load(open(json_file))
         except Exception as e:
-            print(self._error_message (None, e))
+            print(ecsub.tools.error_message (self.cluster_name, None, e))
             return None
         return obj
         
@@ -170,7 +149,7 @@ class Aws_ecsub_control:
             if len(responce["KeyPairs"]) > 0:
                 return True
         except Exception as e:
-            print(self._error_message (None, e))
+            print(ecsub.tools.error_message (self.cluster_name, None, e))
             
         return False  
         
@@ -193,7 +172,7 @@ class Aws_ecsub_control:
             self.aws_key_auto = True
             return True
         
-        print(self._error_message (None, "Failure to create key pair."))
+        print(ecsub.tools.error_message (self.cluster_name, None, "Failure to create key pair."))
         return False
         
     def set_security_group(self):
@@ -205,7 +184,7 @@ class Aws_ecsub_control:
                     return True
             except Exception:
                 pass
-            print(self._error_warning (None, "SecurityGroupId '%s' is invalid." % (self.aws_security_group_id)))
+            print(ecsub.tools.warning_message (self.cluster_name, None, "SecurityGroupId '%s' is invalid." % (self.aws_security_group_id)))
             
         try:
             responce = boto3.client('ec2').describe_security_groups(GroupNames=["default"])
@@ -215,7 +194,7 @@ class Aws_ecsub_control:
         except Exception:
             pass
 
-        print(self._error_message (None, "Default SecurityGroupId is not exist."))
+        print(ecsub.tools.error_message (self.cluster_name, None, "Default SecurityGroupId is not exist."))
         return False
         
     def create_cluster(self):
@@ -251,8 +230,8 @@ class Aws_ecsub_control:
             AWS_REGION = self.aws_region,
             IMAGE_NAME = self.image)
 
-        print(self._info_message (None, "ECSTASKROLE: %s" % (ECSTASKROLE)))
-        print(self._info_message (None, "IMAGE_ARN: %s" % (IMAGE_ARN)))
+        print(ecsub.tools.info_message (self.cluster_name, None, "ECSTASKROLE: %s" % (ECSTASKROLE)))
+        print(ecsub.tools.info_message (self.cluster_name, None, "IMAGE_ARN: %s" % (IMAGE_ARN)))
         
         containerDefinitions = {
             "containerDefinitions": [
@@ -402,9 +381,26 @@ echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
                 return True
             self._subprocess_call(cmd, no)
 
-        print(self._error_message (None, "Failure run instance."))
+        print(ecsub.tools.error_message (self.cluster_name, None, "Failure run instance."))
         return False
 
+    def _check_memory(self, log_file):
+        log = self._json_load(log_file)
+        if len(log["tasks"]) > 0:
+            return (log, None)
+        
+        error_message = []
+        error_message.append("failures: %s" % (json.dumps(log["failures"])))
+        
+        if log["failures"][0]["reason"] != "RESOURCE:MEMORY":
+            return (None, error_message)
+            
+        responce2 = boto3.client('ecs').describe_container_instances(cluster=self.cluster_arn, containerInstances=[log["failures"][0]["arn"]])
+        for resouce in responce2['containerInstances'][0]['remainingResources']:
+            if resouce["name"] == "MEMORY":
+                error_message.append("remainingResources(MEMORY): %d" % (resouce["integerValue"]))
+        return (None, error_message)
+               
     def run_task (self, no):
 
         # run-task
@@ -440,17 +436,26 @@ echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
         )
         self._subprocess_call(cmd, no)
 
-        # run-task error print
-        log = self._json_load(log_file)
-        if log["tasks"] == []:
-            print (self._error_message (no, "failures: %s" % (json.dumps(log["failures"]))))
-            if log["failures"][0]["reason"] == "RESOURCE:MEMORY":
-                responce2 = boto3.client('ecs').describe_container_instances(cluster=self.cluster_arn, containerInstances=[log["failures"][0]["arn"]])
-                for resouce in responce2['containerInstances'][0]['remainingResources']:
-                    if resouce["name"] == "MEMORY":
-                        print (self._error_message (no, "remainingResources(MEMORY): %d" % (resouce["integerValue"])))
-                        break
-            return None
+        # retry run-task and error print
+        (log, err_msg) = self._check_memory(log_file)
+        if log == None:
+            for msg in err_msg:
+                print (ecsub.tools.warning_message (self.cluster_name, no, msg))
+            
+            log_file_retry = self._log_path("run-task-retry.%03d" % (no))
+            cmd = cmd_template.format(
+                set_cmd = self.set_cmd + "; sleep 10",
+                CLUSTER_ARN = self.cluster_arn,
+                TASK_DEFINITION_ARN = self.task_definition_arn,
+                OVERRIDES = overrides,
+                log = log_file_retry
+            )
+            self._subprocess_call(cmd, no)
+            (log, err_msg) = self._check_memory(log_file_retry)
+            if log == None:
+                for msg in err_msg:
+                    print (ecsub.tools.error_message (self.cluster_name, no, msg))
+                return None
 
         # get instance-ID from task-ID
         task_arn = log["tasks"][0]["taskArn"]
@@ -480,7 +485,7 @@ echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
             cluster_name = self.cluster_name,
             task_id = task_arn.split("/")[1]
         )
-        print (self._message (no, [{"text": " For detail, see log-file: "}, {"text": log_html, "color": ecsub.ansi.colors.CYAN}]))
+        print (ecsub.tools._message (self.cluster_name, no, [{"text": " For detail, see log-file: "}, {"text": log_html, "color": ecsub.ansi.colors.CYAN}]))
 
         # set Name to instance
         cmd_template = "{set_cmd};aws ec2 create-tags --resources {INSTANCE_ID} --tags Key=Name,Value={cluster_name}.{I}"
@@ -535,9 +540,9 @@ echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
 
         exit_code = responce["tasks"][0]["containers"][0][u'exitCode']
         if exit_code == 0:
-            print (self._info_message (no, "tasks-stopped with [0]"))
+            print (ecsub.tools.info_message (self.cluster_name, no, "tasks-stopped with [0]"))
         else:
-            print (self._error_message (no, "tasks-stopped with [%d], %s" % (exit_code, responce["tasks"][0]["stoppedReason"])))
+            print (ecsub.tools.error_message (self.cluster_name, no, "tasks-stopped with [%d], %s" % (exit_code, responce["tasks"][0]["stoppedReason"])))
 
         return ec2InstanceId
 

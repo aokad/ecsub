@@ -11,8 +11,9 @@ from multiprocessing import Process
 import string
 import random
 import ecsub.aws
+import ecsub.tools
 
-def read_tasksfile(tasks_file):
+def read_tasksfile(tasks_file, cluster_name):
     
     tasks = []
     header = []
@@ -20,19 +21,22 @@ def read_tasksfile(tasks_file):
     for line in open(tasks_file).readlines():
         if header == []:
             for item in line.rstrip("\n").split("\t"):
-                v = item.split(" ")
-                if v[0].lower() == "--env":
-                    header.append({"type": "env", "recursive": False, "name": v[1]})
+                v = item.strip(" ").split(" ")
+                if v[0] == "":
+                    header.append({"type": "", "recursive": False, "name": ""})
+                
+                elif v[0].lower() == "--env":
+                    header.append({"type": "env", "recursive": False, "name": v[-1]})
                 elif v[0].lower() == "--input-recursive":
-                    header.append({"type": "input", "recursive": True, "name": v[1]})
+                    header.append({"type": "input", "recursive": True, "name": v[-1]})
                 elif v[0].lower() == "--input":
-                    header.append({"type": "input", "recursive": False, "name": v[1]})
+                    header.append({"type": "input", "recursive": False, "name": v[-1]})
                 elif v[0].lower() == "--output-recursive":
-                    header.append({"type": "output", "recursive": True, "name": v[1]})
+                    header.append({"type": "output", "recursive": True, "name": v[-1]})
                 elif v[0].lower() == "--output":
-                    header.append({"type": "output", "recursive": False, "name": v[1]})
+                    header.append({"type": "output", "recursive": False, "name": v[-1]})
                 else:
-                    print ("type %s is not support." % (v[0]))
+                    print (ecsub.tools.error_message (cluster_name, None, "type %s is not support." % (v[0])))
                     return None
             continue
         
@@ -54,9 +58,8 @@ aws s3 cp ${{SCRIPT_EXEC_PATH}} /${{SCRIPT_EXEC_NAME}} --only-show-errors
 
 source /${{SCRIPT_ENVM_NAME}}
 
-df -h
-#<< COMMENTOUT
 {download_script}
+df -h
 mkdir -p ${{OUTPUT_DIR}}
 
 # exec
@@ -65,15 +68,14 @@ df -h
 
 # upload
 {upload_script}
-
-#COMMENTOUT
 """
 
     dw_text = ""
     up_text = ""    
     for i in range(len(task_params["header"])):
+
         if task_params["header"][i]["type"] == "input":
-            cmd_template = "aws s3 cp --only-show-errors {r_option} $S3_{name} ${name}\n"
+            cmd_template = 'if test -n "${name}"; then aws s3 cp --only-show-errors {r_option} $S3_{name} ${name}; fi\n'
             r_option = ""
             if task_params["header"][i]["recursive"]:
                 r_option = "--recursive"
@@ -82,7 +84,7 @@ df -h
                 name = task_params["header"][i]["name"])
             
         elif task_params["header"][i]["type"] == "output":
-            cmd_template = "aws s3 cp --only-show-errors {r_option} ${name} $S3_{name}\n"
+            cmd_template = 'if test -n "${name}"; then aws s3 cp --only-show-errors {r_option} ${name} $S3_{name}; fi\n'
             r_option = ""
             if task_params["header"][i]["recursive"]:
                 r_option = "--recursive"
@@ -103,15 +105,16 @@ def write_setenv(task_params, setenv, no):
         
         if task_params["header"][i]["type"] == "input":
             f.write('export S3_%s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i]))
-            f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i].replace("s3://", "/AWS_INPUT/")))
+            f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i].replace("s3://", "/AWS_DATA/")))
         elif task_params["header"][i]["type"] == "output":
             f.write('export S3_%s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i]))
-            f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i].replace("s3://", "/AWS_OUTPUT/")))
-        else:
+            f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i].replace("s3://", "/AWS_DATA/")))
+        elif task_params["header"][i]["type"] == "env":
             f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i]))
+            
     f.close()
 
-def upload_scripts(task_params, aws_instance, local_root, s3_root, script):
+def upload_scripts(task_params, aws_instance, local_root, s3_root, script, cluster_name):
 
     runsh = local_root + "/run.sh"
     s3_runsh = s3_root + "/run.sh"
@@ -143,16 +146,17 @@ def submit_task(aws_instance, no):
 def main(params):
     
     # read tasks file
-    task_params = read_tasksfile(params["tasks"])
+    params["cluster_name"] = os.path.splitext(os.path.basename(params["tasks"]))[0] \
+        + '-' \
+        + ''.join([random.choice(string.ascii_letters + string.digits) for i in range(5)])
+
+    task_params = read_tasksfile(params["tasks"], params["cluster_name"])
     if task_params == None:
         return -1
     
     if task_params["tasks"] == []:
         return 0
-        
-    params["cluster_name"] = os.path.splitext(os.path.basename(params["tasks"]))[0] \
-        + '-' \
-        + ''.join([random.choice(string.ascii_letters + string.digits) for i in range(5)])
+    
     subdir = params["cluster_name"]
     
     params["wdir"] = params["wdir"].rstrip("/") + "/" + subdir
@@ -160,8 +164,8 @@ def main(params):
     
     if os.path.exists (params["wdir"]):
         shutil.rmtree(params["wdir"])
-        print ("[%s] existing directory was deleted." % (params["wdir"]))
-    
+        print (ecsub.tools.info_message (params["cluster_name"], None, "'%s' existing directory was deleted." % (params["wdir"])))
+        
     os.makedirs(params["wdir"])
     os.makedirs(params["wdir"] + "/log")
     os.makedirs(params["wdir"] + "/conf")
@@ -177,7 +181,8 @@ def main(params):
                        aws_instance, 
                        params["wdir"] + "/script", 
                        params["aws_s3_bucket"].rstrip("/") + "/script",
-                       params["script"])
+                       params["script"],
+                       params["cluster_name"])
         try:
             # create-cluster
             # register-task-definition
@@ -198,7 +203,7 @@ def main(params):
             return 0
             
         except Exception as e:
-            print (e)
+            print (ecsub.tools.error_message (params["cluster_name"], None, e))
             aws_instance.clean_up()
             
         except KeyboardInterrupt:
