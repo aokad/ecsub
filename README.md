@@ -1,3 +1,7 @@
+[![Build Status](https://travis-ci.org/aokad/ecsub.svg?branch=master)](https://travis-ci.org/aokad/ecsub)
+![Python](https://img.shields.io/badge/python-2.7-blue.svg)
+![Python](https://img.shields.io/badge/python-3.x-blue.svg)
+
 # ecsub
 
 ## 1. Dependency
