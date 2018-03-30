@@ -40,12 +40,13 @@ class TestSet(unittest.TestCase):
     def test2_01_submit(self):
         options = [
             "--wdir", "/tmp/ecsub/",
-            "--image", "genomon/bwa_alignment:0.1.0",
-            "--script", "s3://awsbatch-aokad-ohaio/scripts/bwa-alignment.sh",
-            "--tasks", "./example/bwa-alignment-tasks-aokad-20180207-small-1.tsv",
-            "--aws-ec2-instance-type", "t2.2xlarge",
-            "--disk-size", "128",
-            "--aws-s3-bucket", "s3://awsbatch-aokad-ohaio",
+            "--image", "python:2-alpine3.6",
+            "--shell", "ash",
+            "--script", "./example/run-wordcount.sh",
+            "--tasks", "./example/tasks-wordcount.tsv",
+            "--aws-ec2-instance-type", "t2.micro",
+            "--disk-size", "22",
+            "--aws-s3-bucket", "s3://ecsub-ohaio/output/",
         ]
         subprocess.check_call('python ecsub submit'.split(" ") + options)
 

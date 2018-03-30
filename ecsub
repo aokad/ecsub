@@ -20,6 +20,8 @@ def main():
     submit_parser = subparsers.add_parser("submit", help = "submit job")
     submit_parser.add_argument("--wdir", help = "output temporary data", type = str, default = "./")
     submit_parser.add_argument("--image", help = "docker image", type = str, default = "ubuntu")
+    submit_parser.add_argument("--use_amazon_ecr", help = "use_amazon_ecr", action = 'store_true')
+    submit_parser.add_argument("--shell", help = "path to bash or ash in docker-container", type = str, default = "/bin/bash")
     submit_parser.add_argument("--script", help = "run script", type = str, required=True)
     submit_parser.add_argument("--tasks", help = "parameters", type = str, required=True)
     submit_parser.add_argument("--aws-s3-bucket", help = "AWS your S3 bucket", type = str, required=True)

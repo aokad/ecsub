@@ -24,7 +24,7 @@ aws configure
     Default output format [None]: json
 ```
 
-docker image push to your ECS 
+Push your docker image to dockerhub or Amazon ECR.
 
 -------------------------------------------------------------------------
 
@@ -37,12 +37,14 @@ ecsub submit
     --script SCRIPT \
     --tasks  TASKS \
     --aws-s3-bucket AWS_S3_BUCKET \
-    [--aws-ec2-instance-type AWS_EC2_INSTANCE_TYPE] \
-    [--disk-size DISK_SIZE] \
-    [--aws-security-group-id AWS_SECURITY_GROUP_ID] \
-    [--aws-key-name AWS_KEY_NAME] \
-    [--wdir WDIR] \
-    [--image IMAGE]
+    [--aws-ec2-instance-type AWS_EC2_INSTANCE_TYPE (default: "t2.micro")] \
+    [--disk-size DISK_SIZE (default: 22)] \
+    [--aws-security-group-id AWS_SECURITY_GROUP_ID (default: (your "default" security group id))] \
+    [--aws-key-name AWS_KEY_NAME (default: (automatic create))] \
+    [--wdir WDIR (default: "./")] \
+    [--image IMAGE (default: "ubuntu:latest")] \
+    [--use_amazon_ecr USE_AMAZON_ECR (default: False)] \
+    [--shell SHELL (default: "/bin/bash")]
 ```
 
 View job report
@@ -51,6 +53,6 @@ View job report
 ecsub submit ${WDIR}
 ```
 
-## 8. License 
+## 5. License 
 
 See document LICENSE.

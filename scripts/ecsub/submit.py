@@ -20,7 +20,7 @@ def read_tasksfile(tasks_file, cluster_name):
 
     for line in open(tasks_file).readlines():
         if header == []:
-            for item in line.rstrip("\n").split("\t"):
+            for item in line.rstrip("\r\n").split("\t"):
                 v = item.strip(" ").split(" ")
                 if v[0] == "":
                     header.append({"type": "", "recursive": False, "name": ""})
@@ -40,15 +40,14 @@ def read_tasksfile(tasks_file, cluster_name):
                     return None
             continue
         
-        tasks.append(line.rstrip("\n").split("\t"))
-    
+        tasks.append(line.rstrip("\r\n").split("\t"))
+
     return {"tasks": tasks, "header": header}
 
 
-def write_runsh(task_params, runsh):
+def write_runsh(task_params, runsh, shell):
    
-    run_template = """#!/bin/bash
-set -x
+    run_template = """set -x
 
 SCRIPT_ENVM_NAME=`basename ${{SCRIPT_ENVM_PATH}}`
 SCRIPT_EXEC_NAME=`basename ${{SCRIPT_EXEC_PATH}}`
@@ -63,7 +62,7 @@ df -h
 mkdir -p ${{OUTPUT_DIR}}
 
 # exec
-bash /${{SCRIPT_EXEC_NAME}}
+{shell} /${{SCRIPT_EXEC_NAME}}
 df -h
 
 # upload
@@ -93,6 +92,7 @@ df -h
                 name = task_params["header"][i]["name"])
             
     open(runsh, "w").write(run_template.format(
+        shell = shell,
         download_script = dw_text,
         upload_script = up_text
     ))
@@ -114,11 +114,11 @@ def write_setenv(task_params, setenv, no):
             
     f.close()
 
-def upload_scripts(task_params, aws_instance, local_root, s3_root, script, cluster_name):
+def upload_scripts(task_params, aws_instance, local_root, s3_root, script, cluster_name, shell):
 
     runsh = local_root + "/run.sh"
     s3_runsh = s3_root + "/run.sh"
-    write_runsh(task_params, runsh)
+    write_runsh(task_params, runsh, shell)
     aws_instance.s3_copy(runsh, s3_runsh, False)
 
     s3_setenv_list = []
@@ -182,7 +182,9 @@ def main(params):
                        params["wdir"] + "/script", 
                        params["aws_s3_bucket"].rstrip("/") + "/script",
                        params["script"],
-                       params["cluster_name"])
+                       params["cluster_name"],
+                       params["shell"])
+
         try:
             # create-cluster
             # register-task-definition
@@ -216,6 +218,8 @@ def entry_point(args):
     params = {
         "wdir": args.wdir,
         "image": args.image,
+        "shell": args.shell,
+        "use_amazon_ecr": args.use_amazon_ecr,
         "script": args.script,
         "tasks": args.tasks,
         "aws_ec2_instance_type": args.aws_ec2_instance_type,
@@ -229,5 +233,3 @@ def entry_point(args):
     
 if __name__ == "__main__":
     pass
-    
-    

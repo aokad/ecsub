@@ -14,6 +14,7 @@ import boto3
 import ecsub.ansi
 import ecsub.aws_config
 import ecsub.tools
+import glob
 
 class Aws_ecsub_control:
 
@@ -29,6 +30,7 @@ class Aws_ecsub_control:
         self.wdir = params["wdir"].rstrip("/")
         self.cluster_name = params["cluster_name"]
         self.set_cmd = params["set_cmd"]
+        self.shell = params["shell"]
 
         self.aws_ami_id = ecsub.aws_config.AMI_ID[self.aws_region]
         self.aws_ec2_instance_type = params["aws_ec2_instance_type"]
@@ -36,14 +38,15 @@ class Aws_ecsub_control:
         self.aws_ec2_instance_memory = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["memory"]
         self.aws_ec2_instance_disk_size = params["aws_ec2_instance_disk_size"]
         self.image = params["image"]
-
+        self.use_amazon_ecr = params["use_amazon_ecr"]
+        
         self.task_definition_arn = ""
         self.cluster_arn = ""
 
         self.s3_runsh = ""
         self.s3_script = ""
         self.s3_setenv = []
-
+        
     def _subprocess_communicate (self, cmd):
         responce = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).communicate()[0]
         if type(responce) == type(b''):
@@ -225,10 +228,13 @@ class Aws_ecsub_control:
 
         ECSTASKROLE = "arn:aws:iam::{AWS_ACCOUNTID}:role/AmazonECSTaskS3FullAccess".format(
             AWS_ACCOUNTID = self.aws_accountid)
-        IMAGE_ARN = "{AWS_ACCOUNTID}.dkr.ecr.{AWS_REGION}.amazonaws.com/{IMAGE_NAME}".format(
-            AWS_ACCOUNTID = self.aws_accountid,
-            AWS_REGION = self.aws_region,
-            IMAGE_NAME = self.image)
+
+        IMAGE_ARN = self.image
+        if self.use_amazon_ecr:
+            IMAGE_ARN = "{AWS_ACCOUNTID}.dkr.ecr.{AWS_REGION}.amazonaws.com/{IMAGE_NAME}".format(
+                AWS_ACCOUNTID = self.aws_accountid,
+                AWS_REGION = self.aws_region,
+                IMAGE_NAME = self.image)
 
         print(ecsub.tools.info_message (self.cluster_name, None, "ECSTASKROLE: %s" % (ECSTASKROLE)))
         print(ecsub.tools.info_message (self.cluster_name, None, "IMAGE_ARN: %s" % (IMAGE_ARN)))
@@ -242,11 +248,11 @@ class Aws_ecsub_control:
                     "memory": self.aws_ec2_instance_memory,
                     "essential": True,
                       "entryPoint": [
-                          "/bin/bash",
+                          self.shell,
                           "-c"
                       ],
                       "command": [
-                          "apt install -y python-pip; pip install awscli --upgrade; aws configure list; aws s3 cp " + self.s3_runsh + " /exec.sh; /bin/bash /exec.sh"
+                          "apt install -y python-pip; pip install awscli --upgrade; aws configure list; aws s3 cp " + self.s3_runsh + " /exec.sh; " + self.shell + " /exec.sh"
                       ],
                       "environment": [
                           {
@@ -562,18 +568,26 @@ echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
             ec2InstanceId = instance_id
         )
         self._subprocess_call(cmd, no)
-
+        
     def clean_up (self):
-
+        # terminate instances
+        instance_ids = []
+        for log_file in glob.glob("%s/log/run-instances.*.log" % (self.wdir)):
+            log = self._json_load(log_file)
+            instance_ids.append(log["Instances"][0]["InstanceId"])
+            
+        if len(instance_ids) > 0:
+            self.terminate_instances (None, " ".join(instance_ids))
+        
         # delete cluster
         if self.cluster_arn != "":
-            responce = boto3.client('ecs').list_container_instances(cluster=self.cluster_arn)
-            if len(responce['containerInstanceArns']):
-                responce2 = boto3.client('ecs').describe_container_instances(cluster=self.cluster_arn, containerInstances=responce['containerInstanceArns'])
-                instance_ids = ""
-                for instance in responce2['containerInstances']:
-                    instance_ids += instance['ec2InstanceId'] + " "
-                self.terminate_instances (None, instance_ids)
+#            responce = boto3.client('ecs').list_container_instances(cluster=self.cluster_arn)
+#            if len(responce['containerInstanceArns']):
+#                responce2 = boto3.client('ecs').describe_container_instances(cluster=self.cluster_arn, containerInstances=responce['containerInstanceArns'])
+#                instance_ids = ""
+#                for instance in responce2['containerInstances']:
+#                    instance_ids += instance['ec2InstanceId'] + " "
+#                self.terminate_instances (None, instance_ids)
         
             responce = boto3.client('ecs').describe_clusters(clusters=[self.cluster_arn])
             if len(responce["clusters"]) > 0:
