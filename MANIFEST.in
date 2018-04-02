@@ -1,3 +1,3 @@
 include LICENSE
 include README.md
-recursive-include example *.csv
+recursive-include examples *

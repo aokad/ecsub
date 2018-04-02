@@ -1,2 +1,3 @@
 --env NAME	--input INPUT_FILE	--input-recursive SCRIPT	--output OUTPUT_FILE
 Hamlet	s3://ecsub-ohaio/wordcount/input/hamlet.txt	s3://ecsub-ohaio/wordcount/python	s3://ecsub-ohaio/output/hamlet-count.txt
+Kinglear	s3://ecsub-ohaio/wordcount/input/kinglear.txt	s3://ecsub-ohaio/wordcount/python	s3://ecsub-ohaio/output/kinglear-count.txt

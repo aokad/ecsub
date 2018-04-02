@@ -7,7 +7,6 @@ from setuptools import setup
 from scripts.ecsub import __version__
 
 import sys
-sys.path.append('./ecsub')
 sys.path.append('./tests')
 
 setup(name='ecsub',
