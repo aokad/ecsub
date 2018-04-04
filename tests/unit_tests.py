@@ -9,11 +9,12 @@ Created on Tue Jun 28 13:18:34 2016
 
 import unittest
 import os
+import glob
 import subprocess
 
 class TestSet(unittest.TestCase):
 
-    CURRENT = os.path.abspath(os.path.dirname(__file__))
+    WDIR = "/tmp/ecsub"
     
     # init class
     @classmethod
@@ -38,11 +39,11 @@ class TestSet(unittest.TestCase):
 
     def test2_01_submit(self):
         options = [
-            "--wdir", "/tmp/ecsub/",
+            "--wdir", self.WDIR,
             "--image", "python:2-alpine3.6",
             "--shell", "ash",
             "--script", "./examples/run-wordcount.sh",
-            "--tasks", "./examples/tasks-wordcount.tsv",
+            "--tasks", "./tests/test-wordcount.tsv",
             "--aws-ec2-instance-type", "t2.micro",
             "--disk-size", "22",
             "--aws-s3-bucket", "s3://ecsub-ohaio/output/",
@@ -51,10 +52,45 @@ class TestSet(unittest.TestCase):
 
     def test3_01_report(self):
         options = [
-            "--wdir", "/tmp/ecsub/"
+            "--wdir", self.WDIR
         ]
         subprocess.check_call(['python', 'ecsub', 'report'] + options)
 
+    def test4_01_logs(self):
+        
+        # submit job
+        before = glob.glob(self.WDIR + "/*")
+        options = [
+            "--wdir", self.WDIR,
+            "--image", "python:2-alpine3.6",
+            "--shell", "ash",
+            "--script", "./examples/run-wordcount.sh",
+            "--tasks", "./tests/test-wordcount.tsv",
+            "--aws-ec2-instance-type", "t2.micro",
+            "--disk-size", "22",
+            "--aws-s3-bucket", "s3://ecsub-ohaio/output/",
+        ]
+        subprocess.check_call(['python', 'ecsub', 'submit'] + options)
+
+        after = glob.glob(self.WDIR + "/*")
+        
+        for b in before:
+            if b in after:
+                after.remove(b)
+        
+        if len(after) != 1:
+            raise ValueError
+        
+        cluster_name = os.path.basename(after[0])
+        
+        # download and remove
+        options = [
+            "--wdir", self.WDIR,
+            "--prefix", "ecsub-" + cluster_name,
+            "--remove"
+        ]
+        subprocess.check_call(['python', 'ecsub', 'logs'] + options)
+        
 def suite():
     suite = unittest.TestSuite()
     suite.addTests(unittest.makeSuite(TestSet))

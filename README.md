@@ -22,12 +22,20 @@ python setup.py build install
 
 ## 3. Setup
 
+First, set up `aws configure`.
+
 ```
 aws configure
     AWS Access Key ID [None]: <YOUR ACCESS KEY>
     AWS Secret Access Key [None]: <YOUR SECRET ACCESS KEY>
     Default region name [None]: <REGION>
     Default output format [None]: json
+```
+
+Next, create your S3_bucket, as follows.
+
+```
+aws s3 mb s3://yourbucket
 ```
 
 Optionally, push your docker image (requires python) to dockerhub or Amazon ECR.
@@ -67,7 +75,7 @@ For example,
 ecsub submit \
     --script ./examples/run-wordcount.sh \
     --tasks ./examples/tasks-wordcount.tsv \
-    --aws-s3-bucket s3://ecsub-ohaio/output/ \
+    --aws-s3-bucket s3://yourbucket/output/ \
     --wdir /tmp/ecsub/ \
     --image python:2.7.14 \
     --aws-ec2-instance-type t2.micro \
