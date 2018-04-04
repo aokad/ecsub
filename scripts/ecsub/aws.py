@@ -237,8 +237,9 @@ class Aws_ecsub_control:
                 IMAGE_NAME = self.image)
 
         print(ecsub.tools.info_message (self.cluster_name, None, "ECSTASKROLE: %s" % (ECSTASKROLE)))
-        print(ecsub.tools.info_message (self.cluster_name, None, "IMAGE_ARN: %s" % (IMAGE_ARN)))
+        print(ecsub.tools.info_message (self.cluster_name, None, "DOCKER_IMAGE: %s" % (IMAGE_ARN)))
         
+        log_group_name = "ecsub-" + self.cluster_name
         containerDefinitions = {
             "containerDefinitions": [
                 {
@@ -267,7 +268,7 @@ class Aws_ecsub_control:
                       "logConfiguration": {
                           "logDriver": "awslogs",
                           "options": {
-                              "awslogs-group": "ecsub-" + self.cluster_name,
+                              "awslogs-group": log_group_name,
                               "awslogs-region": self.aws_region,
                               "awslogs-stream-prefix": "ecsub"
                           }
@@ -282,13 +283,13 @@ class Aws_ecsub_control:
         json.dump(containerDefinitions, open(json_file, "w"), indent=4, separators=(',', ': '))
 
         # check exists ECS cluster
-        cmd_template = "aws logs describe-log-groups --log-group-name-prefix {cluster_name} | grep logGroupName | grep \"{cluster_name}\" | wc -l"
-        cmd = cmd_template.format(set_cmd = self.set_cmd, cluster_name = self.cluster_name)
+        cmd_template = "aws logs describe-log-groups --log-group-name-prefix {log_group_name} | grep logGroupName | grep \"{log_group_name}\" | wc -l"
+        cmd = cmd_template.format(set_cmd = self.set_cmd, log_group_name = log_group_name)
         responce = self._subprocess_communicate(cmd)
         
         if int(responce) == 0:
-            cmd_template = "{set_cmd}; aws logs create-log-group --log-group-name {cluster_name}"
-            cmd = cmd_template.format(set_cmd = self.set_cmd, cluster_name = self.cluster_name)
+            cmd_template = "{set_cmd}; aws logs create-log-group --log-group-name {log_group_name}"
+            cmd = cmd_template.format(set_cmd = self.set_cmd, log_group_name = log_group_name)
             self._subprocess_call(cmd)
 
         #  register-task-definition
@@ -544,7 +545,7 @@ echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
 
         json.dump(responce, open(log_file, "w"), default=support_datetime_default, indent=4, separators=(',', ': '))
 
-        exit_code = responce["tasks"][0]["containers"][0][u'exitCode']
+        exit_code = responce["tasks"][0]["containers"][0]["exitCode"]
         if exit_code == 0:
             print (ecsub.tools.info_message (self.cluster_name, no, "tasks-stopped with [0]"))
         else:

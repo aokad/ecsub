@@ -50,7 +50,10 @@ def main(params):
         task = json.load(open(log))["tasks"][0]
         for key in header:
             if key == "exitCode":
-                value = task["containers"][0]["exitCode"]
+                if not "exitCode" in task["containers"][0]:
+                    value = "NA"
+                else:
+                    value = task["containers"][0]["exitCode"]
             elif key == "taskname":
                 value = task["containers"][0]["name"]
             elif key == "SCRIPT_ENVM_PATH":
