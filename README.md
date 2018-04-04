@@ -34,21 +34,31 @@ Optionally, push your docker image (requires python) to dockerhub or Amazon ECR.
 
 ## 4. Run
 
-1) Job submit.
+### 1) Job submit.
 
 ```
 ecsub submit \
     --script SCRIPT \
     --tasks  TASKS \
     --aws-s3-bucket AWS_S3_BUCKET \
-    [--aws-ec2-instance-type AWS_EC2_INSTANCE_TYPE (default: "t2.micro")] \
-    [--disk-size DISK_SIZE (default: 22)] \
-    [--aws-security-group-id AWS_SECURITY_GROUP_ID (default: (your "default" security group id))] \
-    [--aws-key-name AWS_KEY_NAME (default: (automatic create))] \
-    [--wdir WDIR (default: "./")] \
-    [--image IMAGE (default: "python:2.7.14")] \
-    [--use_amazon_ecr USE_AMAZON_ECR (default: False)] \
-    [--shell SHELL (default: "/bin/bash")]
+    [--aws-ec2-instance-type AWS_EC2_INSTANCE_TYPE] \
+    [--disk-size DISK_SIZE] \
+    [--aws-security-group-id AWS_SECURITY_GROUP_ID )] \
+    [--aws-key-name AWS_KEY_NAME] \
+    [--wdir WDIR] \
+    [--image IMAGE] \
+    [--use_amazon_ecr USE_AMAZON_ECR] \
+    [--shell SHELL]
+
+optional arguments:
+  --wdir WDIR                     output temporary data (default: "./")
+  --image IMAGE                   docker image (default: "python:2.7.14")
+  --use_amazon_ecr                use_amazon_ecr (default: False)
+  --shell SHELL                   path to "bash" or "ash" (or "dash", ...) in docker-container (default: "/bin/bash")
+  --aws-ec2-instance-type TYPE    AWS instance type (default: "t2.micro")
+  --disk-size DISK_SIZE           AWS disk size (Gib) (default: 22)
+  --aws-security-group-id SG_ID   AWS your security_group_id (default: (your "default" security group id)
+  --aws-key-name KEY_NAME         AWS your key pair name (default: (automatic create))
 ```
 
 For example,
@@ -64,16 +74,20 @@ ecsub submit \
     --disk-size 22
 ```
 
-2) View job report.
+### 2) View job report.
 
 ```
-ecsub report ${WDIR}
+ecsub report \
+    [--wdir WDIR]
+
+optional arguments:
+  --wdir WDIR      {PATH} when 'ecsub submit --wdir {PATH}' (default: "./")
 ```
 
 For example,
 
 ```
-ecsub report /tmp/ecsub/
+ecsub report --wdir /tmp/ecsub/
 ```
 
 <pre>
@@ -81,6 +95,29 @@ ecsub report /tmp/ecsub/
 |       0|tasks-wordcount-7gqRu_task| 0|  1|   800|     t2.micro|       22|2018/04/02 02:43:26 UTC|2018/04/02 02:44:08 UTC|/tmp/ecsub/tasks-wordcount-7gqRu/log/describe-tasks.000.log|
 |     127|tasks-wordcount-Kn8UW_task| 0|  1|   800|     t2.micro|       22|2018/04/02 02:38:28 UTC|2018/04/02 02:38:37 UTC|/tmp/ecsub/tasks-wordcount-Kn8UW/log/describe-tasks.000.log|
 </pre>
+
+### 3) Download log files
+
+ecsub creates logs on AWS CloudWatch.
+If you need, you can download log-files to local directory, and remove log-streams from AWS.
+
+```
+ecsub logs \
+    [--wdir WDIR] \
+    [--prefix PREFIX] \
+    [--remove]
+
+optional arguments:
+  --wdir WDIR      {PATH} when 'ecsub submit --wdir {PATH}' (default: "./")
+  --prefix PREFIX  prefix of LogGroupName in AWS CloudWatch (default: "ecsub")
+  --remove         flag for remove from AWS (default: False)
+```
+
+For example,
+
+```
+ecsub logs --wdir /tmp/ecsub --remove
+```
 
 ## 5. Documentation
 

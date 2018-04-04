@@ -252,7 +252,7 @@ class Aws_ecsub_control:
                           "-c"
                       ],
                       "command": [
-                          "apt install -y python-pip; pip install awscli --upgrade; aws configure list; aws s3 cp " + self.s3_runsh + " /exec.sh; " + self.shell + " /exec.sh"
+                          "apt update; apt install -y python-pip; pip install awscli --upgrade; aws configure list; aws s3 cp " + self.s3_runsh + " /exec.sh; " + self.shell + " /exec.sh"
                       ],
                       "environment": [
                           {
@@ -267,7 +267,7 @@ class Aws_ecsub_control:
                       "logConfiguration": {
                           "logDriver": "awslogs",
                           "options": {
-                              "awslogs-group": self.cluster_name,
+                              "awslogs-group": "ecsub-" + self.cluster_name,
                               "awslogs-region": self.aws_region,
                               "awslogs-stream-prefix": "ecsub"
                           }

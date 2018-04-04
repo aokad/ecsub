@@ -8,6 +8,7 @@ Created on Wed Mar 14 11:53:04 2018
 import argparse
 import ecsub.submit as submit
 import ecsub.report as report
+import ecsub.log as log
 
 def main():
     
@@ -34,9 +35,17 @@ def main():
     ##########
     # report 
     report_parser = subparsers.add_parser("report", help = "view report")
-    report_parser.add_argument("wdir", help = "{PATH} when 'ecsub submit --wdir {PATH}'", type = str, default = "")
+    report_parser.add_argument("--wdir", help = "{PATH} when 'ecsub submit --wdir {PATH}'", type = str, default = "./")
     report_parser.set_defaults(func = report.entry_point)
     
+    ##########
+    # log stream 
+    log_parser = subparsers.add_parser("logs", help = "view report")
+    log_parser.add_argument("--wdir", help = "{PATH} when 'ecsub submit --wdir {PATH}'", type = str, default = "./")
+    log_parser.add_argument("--prefix", help = "prefix of LogGroupName in AWS CloudWatch", type = str, default = "ecsub")
+    log_parser.add_argument("--remove", help = "flag for remove from AWS", action = 'store_true')
+    log_parser.set_defaults(func = log.entry_point)
+
     import sys
     argv = sys.argv[1:]
     if len(argv) < 1:

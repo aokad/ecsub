@@ -9,7 +9,6 @@ Created on Tue Jun 28 13:18:34 2016
 
 import unittest
 import os
-import sys
 import subprocess
 
 class TestSet(unittest.TestCase):
@@ -35,7 +34,7 @@ class TestSet(unittest.TestCase):
         pass
         
     def test1_01_version(self):
-        subprocess.check_call('python ecsub --version'.split(" "))
+        subprocess.check_call(['python', 'ecsub', '--version'])
 
     def test2_01_submit(self):
         options = [
@@ -48,10 +47,13 @@ class TestSet(unittest.TestCase):
             "--disk-size", "22",
             "--aws-s3-bucket", "s3://ecsub-ohaio/output/",
         ]
-        subprocess.check_call('python ecsub submit'.split(" ") + options)
+        subprocess.check_call(['python', 'ecsub', 'submit'] + options)
 
     def test3_01_report(self):
-        subprocess.check_call('python ecsub report /tmp/ecsub/'.split(" "))
+        options = [
+            "--wdir", "/tmp/ecsub/"
+        ]
+        subprocess.check_call(['python', 'ecsub', 'report'] + options)
 
 def suite():
     suite = unittest.TestSuite()
