@@ -13,7 +13,7 @@ import ecsub.tools
 
 TITLE = "ecsub-logs"
 def _timestamp(text):
-   return datetime.datetime.fromtimestamp(long(text)/1000).strftime("%Y%m%d_%H%M%S")
+   return datetime.datetime.fromtimestamp(int(text)/1000).strftime("%Y%m%d_%H%M%S")
 
 def _describe_log_groups(logGroupNamePrefix, nextToken, limit):
     
