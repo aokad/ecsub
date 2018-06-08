@@ -7,11 +7,15 @@ Created on Tue Mar 27 10:41:12 2018
 
 import ecsub.ansi
 
-def _message (title, no, messages):
+def get_title_color (no):
+        
+    return ecsub.ansi.colors.roll_list[no % len(ecsub.ansi.colors.roll_list)]
+        
+def message (title, no, messages):
         
     text = "[%s]" % (title)
     if no != None:     
-        text = ecsub.ansi.colors.paint("[%s:%03d]" % (title, no), ecsub.ansi.colors.roll_list[no % len(ecsub.ansi.colors.roll_list)])
+        text = ecsub.ansi.colors.paint("[%s:%03d]" % (title, no), get_title_color(no))
 
     for m in messages:
         if "color" in m.keys():
@@ -22,14 +26,13 @@ def _message (title, no, messages):
     return text
 
 def warning_message (title, no, text):
-    return _message (title, no, [{"text": " [WARNING] %s" % (text), "color": ecsub.ansi.colors.WARNING}])
+    return message (title, no, [{"text": " [WARNING] %s" % (text), "color": ecsub.ansi.colors.WARNING}])
 
 def error_message (title, no, text):
-    return _message (title, no, [{"text": " [ERROR] %s" % (text), "color": ecsub.ansi.colors.FAIL}])
+    return message (title, no, [{"text": " [ERROR] %s" % (text), "color": ecsub.ansi.colors.FAIL}])
 
 def info_message (title, no, text):
-    return _message (title, no, [{"text": " %s" % (text)}])
-    
+    return message (title, no, [{"text": " %s" % (text)}])
     
 def main():
     pass

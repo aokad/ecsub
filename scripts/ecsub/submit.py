@@ -59,7 +59,6 @@ source /${{SCRIPT_ENVM_NAME}}
 
 {download_script}
 df -h
-mkdir -p ${{OUTPUT_DIR}}
 
 # exec
 {shell} /${{SCRIPT_EXEC_NAME}}

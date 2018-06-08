@@ -31,7 +31,8 @@ class Aws_ecsub_control:
         self.cluster_name = params["cluster_name"]
         self.set_cmd = params["set_cmd"]
         self.shell = params["shell"]
-
+        self.log_group_name = "ecsub-" + self.cluster_name
+        
         self.aws_ami_id = ecsub.aws_config.AMI_ID[self.aws_region]
         self.aws_ec2_instance_type = params["aws_ec2_instance_type"]
         self.aws_ec2_instance_cpu = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["vcpu"]
@@ -102,6 +103,46 @@ class Aws_ecsub_control:
                     return False
         return True
 
+    def check_roles(self):
+    
+        def _check_role(role_name, service, cluster_name):
+            result = True
+            try:
+                responce = boto3.client('iam').get_role(RoleName = role_name)
+                if responce["Role"]["AssumeRolePolicyDocument"]["Statement"][0]["Principal"]["Service"] != service:
+                    result = False
+
+            except Exception as e:
+                print(ecsub.tools.error_message (cluster_name, None, e))
+                result = False
+            return result
+        
+        def _check_policy(policy_arn, cluster_name):
+            result = True
+            try:
+                responce = boto3.client('iam').get_policy(PolicyArn = policy_arn)
+
+            except Exception as e:
+                print(ecsub.tools.error_message (cluster_name, None, e))
+                result = False
+            return result
+            
+        result = True
+        if not _check_role("AmazonECSTaskS3FullAccess", "ecs-tasks.amazonaws.com", self.cluster_name):
+        
+            result = False
+            
+        if not _check_role("ecsInstanceRole", "ec2.amazonaws.com", self.cluster_name):
+            result = False
+            
+        if not _check_role("ecsTaskExecutionRole", "ecs-tasks.amazonaws.com", self.cluster_name):
+            result = False
+            
+        if not _check_policy("arn:aws:iam::%s:policy/AmazonECSEventsTaskExecutionRole" % (self.aws_accountid), self.cluster_name):
+            result = False
+
+        return result
+    
     def s3_copy(self, src, dst, recursive):
 
         cmd_template = "{set_cmd}; aws s3 cp --only-show-errors {r_option} {file1} {file2}"
@@ -239,7 +280,6 @@ class Aws_ecsub_control:
         print(ecsub.tools.info_message (self.cluster_name, None, "ECSTASKROLE: %s" % (ECSTASKROLE)))
         print(ecsub.tools.info_message (self.cluster_name, None, "DOCKER_IMAGE: %s" % (IMAGE_ARN)))
         
-        log_group_name = "ecsub-" + self.cluster_name
         containerDefinitions = {
             "containerDefinitions": [
                 {
@@ -268,7 +308,7 @@ class Aws_ecsub_control:
                       "logConfiguration": {
                           "logDriver": "awslogs",
                           "options": {
-                              "awslogs-group": log_group_name,
+                              "awslogs-group": self.log_group_name,
                               "awslogs-region": self.aws_region,
                               "awslogs-stream-prefix": "ecsub"
                           }
@@ -284,12 +324,12 @@ class Aws_ecsub_control:
 
         # check exists ECS cluster
         cmd_template = "aws logs describe-log-groups --log-group-name-prefix {log_group_name} | grep logGroupName | grep \"{log_group_name}\" | wc -l"
-        cmd = cmd_template.format(set_cmd = self.set_cmd, log_group_name = log_group_name)
+        cmd = cmd_template.format(set_cmd = self.set_cmd, log_group_name = self.log_group_name)
         responce = self._subprocess_communicate(cmd)
         
         if int(responce) == 0:
             cmd_template = "{set_cmd}; aws logs create-log-group --log-group-name {log_group_name}"
-            cmd = cmd_template.format(set_cmd = self.set_cmd, log_group_name = log_group_name)
+            cmd = cmd_template.format(set_cmd = self.set_cmd, log_group_name = self.log_group_name)
             self._subprocess_call(cmd)
 
         #  register-task-definition
@@ -485,14 +525,16 @@ echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
 
         # get log-path
         log_html_template = "https://{region}.console.aws.amazon.com/cloudwatch/home" \
-            + "?region={region}#logEventViewer:group={cluster_name};stream=ecsub/{cluster_name}_task/{task_id}"
+            + "?region={region}#logEventViewer:group={log_group_name};stream=ecsub/{cluster_name}_task/{task_id}"
 
         log_html = log_html_template.format(
             region = self.aws_region,
             cluster_name = self.cluster_name,
+            log_group_name = self.log_group_name,
             task_id = task_arn.split("/")[1]
         )
-        print (ecsub.tools._message (self.cluster_name, no, [{"text": " For detail, see log-file: "}, {"text": log_html, "color": ecsub.ansi.colors.CYAN}]))
+        #print (ecsub.tools.message (self.cluster_name, no, [{"text": " For detail, see log-file: "}, {"text": log_html, "color": ecsub.ansi.colors.CYAN}]))
+        print (ecsub.tools.message (self.cluster_name, no, [{"text": " For detail, see log-file: "}, {"text": log_html, "color": ecsub.tools.get_title_color(no)}]))
 
         # set Name to instance
         cmd_template = "{set_cmd};aws ec2 create-tags --resources {INSTANCE_ID} --tags Key=Name,Value={cluster_name}.{I}"

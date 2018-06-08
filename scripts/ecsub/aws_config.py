@@ -74,21 +74,21 @@ INSTANCE_TYPE = {
 }
 
 AMI_ID = {
-    "us-east-2"     : "ami-ef64528a",
-    "us-east-1"     : "ami-cad827b7",
-    "us-west-2"     : "ami-baa236c2",
-    "us-west-1"     : "ami-29b8b249",
-    "eu-west-3"     : "ami-0356e07e",
-    "eu-west-2"     : "ami-25f51242",
-    "eu-west-1"     : "ami-64c4871d",
-    "eu-central-1"  : "ami-3b7d1354",
-    "ap-northeast-2": "ami-3b19b455",
-    "ap-northeast-1": "ami-bb5f13dd",
-    "ap-southeast-2": "ami-a677b6c4",
-    "ap-southeast-1": "ami-f88ade84",
-    "ca-central-1"  : "ami-db48cfbf",
-    "ap-south-1"    : "ami-9e91cff1",
-    "sa-east-1"     : "ami-da2c66b6"
+    "us-east-2"     : "ami-64300001",
+    "us-east-1"     : "ami-aff65ad2",
+    "us-west-2"     : "ami-40ddb938",
+    "us-west-1"     : "ami-69677709",
+    "eu-west-3"     : "ami-250eb858",
+    "eu-west-2"     : "ami-2218f945",
+    "eu-west-1"     : "ami-2d386654",
+    "eu-central-1"  : "ami-9fc39c74",
+    "ap-northeast-2": "ami-9d56f9f3",
+    "ap-northeast-1": "ami-a99d8ad5",
+    "ap-southeast-2": "ami-efda148d",
+    "ap-southeast-1": "ami-846144f8",
+    "ca-central-1"  : "ami-897ff9ed",
+    "ap-south-1"    : "ami-72edc81d",
+    "sa-east-1"     : "ami-4a7e2826"
 }
 
 def main():
