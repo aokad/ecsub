@@ -381,7 +381,7 @@ echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
         }]
         json_file = self._conf_path("block_device_mappings.json")
         json.dump(block_device_mappings, open(json_file, "w"), indent=4, separators=(',', ': '))
-	subnet_id = ""
+        subnet_id = ""
         if self.aws_subnet_id != "":
             subnet_id = "--subnet-id %s" % (self.aws_subnet_id)
 
