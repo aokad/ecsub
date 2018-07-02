@@ -30,6 +30,7 @@ def main():
     submit_parser.add_argument("--disk-size", help = "AWS disk size", type = int, default = 22)
     submit_parser.add_argument("--aws-security-group-id", help = "AWS your security_group_id", type = str, default = "")
     submit_parser.add_argument("--aws-key-name", help = "AWS your key pair name", type = str, default = "")
+    submit_parser.add_argument("--aws-subnet-id", help = "AWS subnet_id", type = str, default = "")
     submit_parser.set_defaults(func = submit.entry_point)
     
     ##########

@@ -53,6 +53,7 @@ ecsub submit \
     [--disk-size DISK_SIZE] \
     [--aws-security-group-id AWS_SECURITY_GROUP_ID )] \
     [--aws-key-name AWS_KEY_NAME] \
+    [--aws-subnet-id AWS_SUBNET_ID] \
     [--wdir WDIR] \
     [--image IMAGE] \
     [--use_amazon_ecr USE_AMAZON_ECR] \
@@ -67,6 +68,7 @@ optional arguments:
   --disk-size DISK_SIZE           AWS disk size (Gib) (default: 22)
   --aws-security-group-id SG_ID   AWS your security_group_id (default: (your "default" security group id)
   --aws-key-name KEY_NAME         AWS your key pair name (default: (automatic create))
+  --aws-subnet-id SUBNET_ID       AWS your subnet_id (default: (your "default" VPC's "default" subnet id)
 ```
 
 For example,

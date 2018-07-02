@@ -38,6 +38,7 @@ class Aws_ecsub_control:
         self.aws_ec2_instance_cpu = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["vcpu"]
         self.aws_ec2_instance_memory = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["memory"]
         self.aws_ec2_instance_disk_size = params["aws_ec2_instance_disk_size"]
+        self.aws_subnet_id = params["aws_subnet_id"]
         self.image = params["image"]
         self.use_amazon_ecr = params["use_amazon_ecr"]
         
@@ -380,6 +381,9 @@ echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
         }]
         json_file = self._conf_path("block_device_mappings.json")
         json.dump(block_device_mappings, open(json_file, "w"), indent=4, separators=(',', ': '))
+	subnet_id = ""
+        if self.aws_subnet_id != "":
+            subnet_id = "--subnet-id %s" % (self.aws_subnet_id)
 
         cmd_template = "{set_cmd};" \
             + "aws ec2 run-instances" \
@@ -390,7 +394,7 @@ echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
             + " --iam-instance-profile Name=ecsInstanceRole" \
             + " --instance-type {instance_type}" \
             + " --block-device-mappings file://{json}" \
-            + " --count 1" \
+            + " --count 1 {subnet_id}" \
             + " > {log}"
 
         cmd = cmd_template.format(
@@ -398,6 +402,7 @@ echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
             AMI_ID = self.aws_ami_id,
             SECURITYGROUPID = self.aws_security_group_id,
             KEY_NAME = self.aws_key_name,
+            subnet_id = subnet_id,
             instance_type = self.aws_ec2_instance_type,
             json = json_file,
             INDEX = no,

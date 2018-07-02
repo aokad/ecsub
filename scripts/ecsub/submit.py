@@ -226,6 +226,7 @@ def entry_point(args):
         "aws_s3_bucket": args.aws_s3_bucket,
         "aws_security_group_id": args.aws_security_group_id,
         "aws_key_name": args.aws_key_name,
+        "aws_subnet_id": args.aws_subnet_id,
         "set_cmd": "set -x",
     }
     return main(params)
