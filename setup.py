@@ -48,7 +48,8 @@ setup(name='ecsub',
       install_requires=[
           # -*- Extra requirements: -*-
           'awscli',
-          'boto3'
+          'boto3',
+          'pytz'
       ],
       entry_points="""
       # -*- Entry points: -*-
