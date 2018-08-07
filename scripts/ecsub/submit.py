@@ -12,6 +12,7 @@ import string
 import random
 import ecsub.aws
 import ecsub.tools
+import ecsub.metrics
 
 def read_tasksfile(tasks_file, cluster_name):
     
@@ -200,7 +201,9 @@ def main(params):
                 for process in process_list:
                     process.join()
     
-            aws_instance.clean_up()    
+            aws_instance.clean_up()
+            ecsub.metrics.entry_point(params["wdir"])
+            
             return 0
             
         except Exception as e:

@@ -33,7 +33,8 @@ class Aws_ecsub_control:
         self.shell = params["shell"]
         self.log_group_name = "ecsub-" + self.cluster_name
         
-        self.aws_ami_id = ecsub.aws_config.AMI_ID[self.aws_region]
+        #self.aws_ami_id = ecsub.aws_config.AMI_ID[self.aws_region]
+        self.aws_ami_id = ecsub.aws_config.get_ami_id()
         self.aws_ec2_instance_type = params["aws_ec2_instance_type"]
         self.aws_ec2_instance_cpu = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["vcpu"]
         self.aws_ec2_instance_memory = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["memory"]
@@ -360,15 +361,71 @@ Content-Type: text/cloud-boothook; charset="us-ascii"
 # Install nfs-utils
 cloud-init-per once yum_update yum update -y
 cloud-init-per once install_nfs_utils yum install -y nfs-utils
+cloud-init-per once install_tr yum install -y tr
+cloud-init-per once install_td yum install -y td
+cloud-init-per once install_python27_pip yum install -y python27-pip
+cloud-init-per once install_awscli pip install awscli
 
 cloud-init-per once docker_options echo 'OPTIONS="${{OPTIONS}} --storage-opt dm.basesize={disk_size}G"' >> /etc/sysconfig/docker
+cloud-init-per once ecs_option echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
 
 #!/bin/bash
 # Set any ECS agent configuration options
-echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
+# echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
 
+cat << EOF > /root/metricscript.sh
+AWSREGION={region}
+AWSINSTANCEID=\$(curl -ss http://169.254.169.254/latest/meta-data/instance-id)
+ECS_CLUSTER_NAME=\$(cat /etc/ecs/ecs.config | grep ^ECS_CLUSTER | cut -d "/" -f 2)
+
+function convertUnits {{
+
+  unit=\$(echo \$1 | tr -d [0-9.] | tr '[:upper:]' '[:lower:]')
+  value=\$(echo \$1 | tr -d [A-Za-z,])
+  
+  if [ "\$unit" == "b" ] ; then
+    echo \$value
+  elif [ "\$unit" == "kb" ] ; then
+    awk 'BEGIN{{ printf "%.0f\\n", '\$value' * 1000 }}'
+  elif [ "\$unit" == "mb" ] ; then
+    awk 'BEGIN{{ printf "%.0f\\n", '\$value' * 1000**2 }}'
+  elif [ "\$unit" == "gb" ] ; then
+    awk 'BEGIN{{ printf "%.0f\\n", '\$value' * 1000**3 }}'
+  elif [ "\$unit" == "tb" ] ; then
+    awk 'BEGIN{{ printf "%.0f\\n", '\$value' * 1000**4 }}'
+  else
+    echo "Unknown unit \$unit"
+    exit 1
+  fi
+}}
+
+disk_used=\$(convertUnits \$(docker info | awk '/Data Space Used/ {{print \$4}}'))
+disk_total=\$(convertUnits \$(docker info | awk '/Data Space Total/ {{print \$4}}'))
+disk_util=\$(awk 'BEGIN{{ printf "%.0f\\n", '\$disk_used'*100/('\$disk_total') }}')
+aws cloudwatch put-metric-data --value \$disk_util --namespace ECSUB --unit Percent --metric-name DataStorageUtilization --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
+
+mem_used=\$(vmstat -s | grep "used memory" | sed s/^" "*/""/ | cut -f 1 -d " ")
+mem_free=\$(vmstat -s | grep "free memory" | sed s/^" "*/""/ | cut -f 1 -d " ")
+mem_util=\$(awk 'BEGIN{{ printf "%.0f\\n", '\$mem_used'*100/('\$mem_used'+'\$mem_free') }}')
+aws cloudwatch put-metric-data --value \$mem_util --namespace ECSUB --unit Percent --metric-name MemoryUtilization --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
+
+sts=(\$(vmstat | tail -n 1))
+cpu_util=\$(awk 'BEGIN{{ printf "%.0f\\n", '\${{sts[12]}}'+'\${{sts[13]}}' }}')
+aws cloudwatch put-metric-data --value \$cpu_util --namespace ECSUB --unit Percent --metric-name CPUUtilization --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
+EOF
+
+chmod +x /root/metricscript.sh
+
+cat << EOF > /etc/crontab
+SHELL=/bin/bash
+PATH=/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+MAILTO=
+HOME=/
+*/1 * * * * root /root/metricscript.sh
+*/30 * * * * cat /dev/null > /var/spool/mail/root
+EOF
 --==BOUNDARY==--
-""".format(cluster_arn = self.cluster_arn, disk_size = self.aws_ec2_instance_disk_size))
+""".format(cluster_arn = self.cluster_arn, disk_size = self.aws_ec2_instance_disk_size, region = self.aws_region))
 
         log_file = self._log_path("run-instances.%03d" % (no))
 
@@ -542,23 +599,27 @@ echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
         print (ecsub.tools.message (self.cluster_name, no, [{"text": " For detail, see log-file: "}, {"text": log_html, "color": ecsub.tools.get_title_color(no)}]))
 
         # set Name to instance
-        cmd_template = "{set_cmd};aws ec2 create-tags --resources {INSTANCE_ID} --tags Key=Name,Value={cluster_name}.{I}"
+        instanceName = "{cluster_name}.{I}".format(cluster_name = self.cluster_name, I = no)
+        cmd_template = "{set_cmd};aws ec2 create-tags --resources {INSTANCE_ID} --tags Key=Name,Value={instanceName}"
 
         cmd = cmd_template.format(
             set_cmd = self.set_cmd,
             INSTANCE_ID = ec2InstanceId,
-            cluster_name = self.cluster_name,
-            I = no,
+            instanceName = instanceName
         )
         self._subprocess_call(cmd, no)
-
+        json.dump(
+            {"InstanceId": ec2InstanceId, "InstanceName": instanceName},
+            open(self._log_path("create-tags.%03d" % (no)), "w")
+        )
+        
         # wait to task-stop
         cmd_template = "{set_cmd};aws ecs wait tasks-stopped --tasks {TASK_ARN} --cluster {CLUSTER_ARN}"
 
         cmd = cmd_template.format(
             set_cmd = self.set_cmd,
             CLUSTER_ARN = self.cluster_arn,
-            TASK_ARN = task_arn,
+            TASK_ARN = task_arn
         )
         self._subprocess_call(cmd, no)
 
