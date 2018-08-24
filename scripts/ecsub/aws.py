@@ -652,13 +652,16 @@ EOF
             raise TypeError(repr(o) + " is not JSON serializable")
 
         json.dump(responce, open(log_file, "w"), default=support_datetime_default, indent=4, separators=(',', ': '))
-
-        exit_code = responce["tasks"][0]["containers"][0]["exitCode"]
-        if exit_code == 0:
-            print (ecsub.tools.info_message (self.cluster_name, no, "tasks-stopped with [0]"))
+        
+        if "exitCode" in responce["tasks"][0]["containers"][0]:
+            exit_code = responce["tasks"][0]["containers"][0]["exitCode"]
+            if exit_code == 0:
+                print (ecsub.tools.info_message (self.cluster_name, no, "tasks-stopped with [0]"))
+            else:
+                print (ecsub.tools.error_message (self.cluster_name, no, "tasks-stopped with [%d], %s" % (exit_code, responce["tasks"][0]["stoppedReason"])))
         else:
-            print (ecsub.tools.error_message (self.cluster_name, no, "tasks-stopped with [%d], %s" % (exit_code, responce["tasks"][0]["stoppedReason"])))
-
+            print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (exit_code, responce["tasks"][0]["stoppedReason"])))
+            
         return ec2InstanceId
 
     def terminate_instances (self, no, instance_id):

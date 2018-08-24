@@ -146,9 +146,11 @@ def submit_task(aws_instance, no):
 def main(params):
     
     # read tasks file
-    params["cluster_name"] = os.path.splitext(os.path.basename(params["tasks"]))[0] \
-        + '-' \
-        + ''.join([random.choice(string.ascii_letters + string.digits) for i in range(5)])
+    params["cluster_name"] = params["task_name"]
+    if params["cluster_name"] == "":
+        params["cluster_name"] = os.path.splitext(os.path.basename(params["tasks"]))[0] \
+            + '-' \
+            + ''.join([random.choice(string.ascii_letters + string.digits) for i in range(5)])
 
     task_params = read_tasksfile(params["tasks"], params["cluster_name"])
     if task_params == None:
@@ -224,6 +226,7 @@ def entry_point(args):
         "use_amazon_ecr": args.use_amazon_ecr,
         "script": args.script,
         "tasks": args.tasks,
+        "task_name": args.task_name,
         "aws_ec2_instance_type": args.aws_ec2_instance_type,
         "aws_ec2_instance_disk_size": args.disk_size,
         "aws_s3_bucket": args.aws_s3_bucket,

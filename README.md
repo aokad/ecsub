@@ -57,13 +57,15 @@ ecsub submit \
     [--wdir WDIR] \
     [--image IMAGE] \
     [--use_amazon_ecr USE_AMAZON_ECR] \
-    [--shell SHELL]
+    [--shell SHELL] \
+    [--task-name TASK_NAME]
 
 optional arguments:
   --wdir WDIR                     output temporary data (default: "./")
   --image IMAGE                   docker image (default: "python:2.7.14")
   --use_amazon_ecr                use_amazon_ecr (default: False)
   --shell SHELL                   path to "bash" or "ash" (or "dash", ...) in docker-container (default: "/bin/bash")
+  --task-name TASK_NAME           submit name as AWS ECS cluster name (default: ${filename of "tasks" option}-${random 5 letters})
   --aws-ec2-instance-type TYPE    AWS instance type (default: "t2.micro")
   --disk-size DISK_SIZE           AWS disk size (Gib) (default: 22)
   --aws-security-group-id SG_ID   AWS your security_group_id (default: (your "default" security group id)

@@ -25,6 +25,7 @@ def main():
     submit_parser.add_argument("--shell", help = "path to bash or ash in docker-container", type = str, default = "/bin/bash")
     submit_parser.add_argument("--script", help = "run script", type = str, required=True)
     submit_parser.add_argument("--tasks", help = "parameters", type = str, required=True)
+    submit_parser.add_argument("--task-name", help = "submit name as AWS ECS cluster name", type = str, default = "")
     submit_parser.add_argument("--aws-s3-bucket", help = "AWS your S3 bucket", type = str, required=True)
     submit_parser.add_argument("--aws-ec2-instance-type", help = "AWS instance type", type = str, default = "t2.micro")
     submit_parser.add_argument("--disk-size", help = "AWS disk size", type = int, default = 22)
