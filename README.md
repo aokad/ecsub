@@ -76,8 +76,8 @@ optional arguments:
 For example,
 
 ```Bash
-bucket=s3://yourbucket
-ecsub_root={download_path}
+bucket=s3://{yourbucket_name}
+ecsub_root={ecsub_download_path}
 ecsub submit \
     --script ${ecsub_root}/examples/run-wordcount.sh \
     --tasks ${ecsub_root}/examples/tasks-wordcount.tsv \
