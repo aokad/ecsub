@@ -137,11 +137,11 @@ class Aws_ecsub_control:
         if not _check_role("ecsInstanceRole", "ec2.amazonaws.com", self.cluster_name):
             result = False
             
-        if not _check_role("ecsTaskExecutionRole", "ecs-tasks.amazonaws.com", self.cluster_name):
-            result = False
-            
-        if not _check_policy("arn:aws:iam::%s:policy/AmazonECSEventsTaskExecutionRole" % (self.aws_accountid), self.cluster_name):
-            result = False
+        #if not _check_role("ecsTaskExecutionRole", "ecs-tasks.amazonaws.com", self.cluster_name):
+        #    result = False
+        #    
+        #if not _check_policy("arn:aws:iam::%s:policy/AmazonECSEventsTaskExecutionRole" % (self.aws_accountid), self.cluster_name):
+        #    result = False
 
         return result
     
@@ -269,7 +269,7 @@ class Aws_ecsub_control:
 
     def register_task_definition(self):
 
-        ECSTASKROLE = "arn:aws:iam::{AWS_ACCOUNTID}:role/AmazonECSTaskS3FullAccess".format(
+        ECSTASKROLE = "arn:aws:iam::{AWS_ACCOUNTID}:role/ecsInstanceRole".format(
             AWS_ACCOUNTID = self.aws_accountid)
 
         IMAGE_ARN = self.image
