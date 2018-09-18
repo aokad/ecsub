@@ -36,8 +36,9 @@ class Aws_ecsub_control:
         #self.aws_ami_id = ecsub.aws_config.AMI_ID[self.aws_region]
         self.aws_ami_id = ecsub.aws_config.get_ami_id()
         self.aws_ec2_instance_type = params["aws_ec2_instance_type"]
-        self.aws_ec2_instance_cpu = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["vcpu"]
-        self.aws_ec2_instance_memory = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["memory"]
+        self.aws_ecs_task_vcpu = params["aws_ecs_task_vcpu"]
+        self.aws_ecs_task_memory = params["aws_ecs_task_memory"]
+        
         self.aws_ec2_instance_disk_size = params["aws_ec2_instance_disk_size"]
         self.aws_subnet_id = params["aws_subnet_id"]
         self.image = params["image"]
@@ -108,25 +109,27 @@ class Aws_ecsub_control:
     def check_roles(self):
     
         def _check_role(role_name, service, cluster_name):
-            result = True
+            result = False
             try:
                 responce = boto3.client('iam').get_role(RoleName = role_name)
-                if responce["Role"]["AssumeRolePolicyDocument"]["Statement"][0]["Principal"]["Service"] != service:
-                    result = False
+                if responce["Role"]["AssumeRolePolicyDocument"]["Statement"][0]["Principal"]["Service"] == service:
+                    result = True
 
             except Exception as e:
                 print(ecsub.tools.error_message (cluster_name, None, e))
-                result = False
+                
             return result
         
         def _check_policy(policy_arn, cluster_name):
-            result = True
+            result = False
             try:
                 responce = boto3.client('iam').get_policy(PolicyArn = policy_arn)
-
+                if responce["Policy"]["IsAttachable"]:
+                    result = True
+                    
             except Exception as e:
                 print(ecsub.tools.error_message (cluster_name, None, e))
-                result = False
+                
             return result
             
         result = True
@@ -287,8 +290,8 @@ class Aws_ecsub_control:
                 {
                     "name": self.cluster_name + "_task",
                     "image": IMAGE_ARN,
-                    "cpu": self.aws_ec2_instance_cpu,
-                    "memory": self.aws_ec2_instance_memory,
+                    "cpu": self.aws_ecs_task_vcpu,
+                    "memory": self.aws_ecs_task_memory,
                     "essential": True,
                       "entryPoint": [
                           self.shell,
@@ -652,7 +655,7 @@ EOF
             raise TypeError(repr(o) + " is not JSON serializable")
 
         json.dump(responce, open(log_file, "w"), default=support_datetime_default, indent=4, separators=(',', ': '))
-        
+
         if "exitCode" in responce["tasks"][0]["containers"][0]:
             exit_code = responce["tasks"][0]["containers"][0]["exitCode"]
             if exit_code == 0:
@@ -660,7 +663,7 @@ EOF
             else:
                 print (ecsub.tools.error_message (self.cluster_name, no, "tasks-stopped with [%d], %s" % (exit_code, responce["tasks"][0]["stoppedReason"])))
         else:
-            print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (exit_code, responce["tasks"][0]["stoppedReason"])))
+            print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (responce["tasks"][0]["stoppedReason"])))
             
         return ec2InstanceId
 

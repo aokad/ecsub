@@ -145,6 +145,26 @@ def submit_task(aws_instance, no):
     
 def main(params):
     
+    # check instance type and set memory, vpu
+    undefined = False
+    if params["aws_ec2_instance_type"] in ecsub.aws_config.INSTANCE_TYPE:
+        if params["aws_ecs_task_memory"] == 0:
+            params["aws_ecs_task_memory"] = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["memory"]
+        if params["aws_ecs_task_vcpu"] == 0:
+            params["aws_ecs_task_vcpu"] = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["vcpu"]
+    else:
+        print (ecsub.tools.info_message (params["cluster_name"], None, "instance-type %s is not defined in ecsub." % (params["aws_ec2_instance_type"])))
+        if params["aws_ecs_task_memory"] == 0:
+            print (ecsub.tools.error_message (params["cluster_name"], None, "--memory option is required."))
+            undefined = True
+
+        if params["aws_ecs_task_vcpu"] == 0:
+            print (ecsub.tools.error_message (params["cluster_name"], None, "--vcpu option is required."))
+            undefined = True
+            
+    if undefined:
+        return -1
+    
     # read tasks file
     params["cluster_name"] = params["task_name"]
     if params["cluster_name"] == "":
@@ -229,6 +249,8 @@ def entry_point(args):
         "task_name": args.task_name,
         "aws_ec2_instance_type": args.aws_ec2_instance_type,
         "aws_ec2_instance_disk_size": args.disk_size,
+        "aws_ecs_task_memory": args.memory,
+        "aws_ecs_task_vcpu": args.vcpu,
         "aws_s3_bucket": args.aws_s3_bucket,
         "aws_security_group_id": args.aws_security_group_id,
         "aws_key_name": args.aws_key_name,

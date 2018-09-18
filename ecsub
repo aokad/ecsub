@@ -1,4 +1,6 @@
+#! /usr/bin/env python
 # -*- coding: utf-8 -*-
+
 """
 Created on Wed Mar 14 11:53:04 2018
 
@@ -9,11 +11,12 @@ import argparse
 import ecsub.submit as submit
 import ecsub.report as report
 import ecsub.log as log
+from ecsub import __version__
 
 def main():
-    
-    parser = argparse.ArgumentParser(prog = "ecsub")
-    parser.add_argument("--version", action = "version", version = '%(prog)s 0.0.1')
+    prog = "ecsub"
+    parser = argparse.ArgumentParser(prog = prog)
+    parser.add_argument("--version", action = "version", version = prog + "-" + __version__)
     subparsers = parser.add_subparsers()
     
     ##########
@@ -28,7 +31,9 @@ def main():
     submit_parser.add_argument("--task-name", help = "submit name as AWS ECS cluster name", type = str, default = "")
     submit_parser.add_argument("--aws-s3-bucket", help = "AWS your S3 bucket", type = str, required=True)
     submit_parser.add_argument("--aws-ec2-instance-type", help = "AWS instance type", type = str, default = "t2.micro")
-    submit_parser.add_argument("--disk-size", help = "AWS disk size", type = int, default = 22)
+    submit_parser.add_argument("--disk-size", help = "AWS disk size (GiB)", type = int, default = 22)
+    submit_parser.add_argument("--memory", help = "Memory used by AWS ECS task", type = int, default = 0)
+    submit_parser.add_argument("--vcpu", help = "vCpu used by AWS ECS task", type = int, default = 0)
     submit_parser.add_argument("--aws-security-group-id", help = "AWS your security_group_id", type = str, default = "")
     submit_parser.add_argument("--aws-key-name", help = "AWS your key pair name", type = str, default = "")
     submit_parser.add_argument("--aws-subnet-id", help = "AWS subnet_id", type = str, default = "")
