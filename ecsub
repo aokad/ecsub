@@ -59,7 +59,7 @@ def main():
         argv = [""]
         
     (known_args, unknown_args) = parser.parse_known_args(argv)
-    if len(unknown_args) > 0:
+    if len(unknown_args) > 0 and len(unknown_args[0]) > 0:
         print ("This option is invalid.")
         print (unknown_args)
     
