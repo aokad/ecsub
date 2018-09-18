@@ -14,7 +14,7 @@
 
 Dependent packages are installed automatically.
 
-```
+```Bash
 git clone https://github.com/aokad/ecsub.git
 cd ecsub
 python setup.py build install
@@ -24,7 +24,7 @@ python setup.py build install
 
 First, set up `aws configure`.
 
-```
+```Bash
 aws configure
     AWS Access Key ID [None]: <YOUR ACCESS KEY>
     AWS Secret Access Key [None]: <YOUR SECRET ACCESS KEY>
@@ -34,7 +34,7 @@ aws configure
 
 Next, create your S3_bucket, as follows.
 
-```
+```Bash
 aws s3 mb s3://yourbucket
 ```
 
@@ -44,7 +44,7 @@ Optionally, push your docker image (requires python) to dockerhub or Amazon ECR.
 
 ### 1) Job submit.
 
-```
+```Bash
 ecsub submit \
     --script SCRIPT \
     --tasks  TASKS \
@@ -75,11 +75,13 @@ optional arguments:
 
 For example,
 
-```
+```Bash
+bucket=s3://{yourbucket_name}
+ecsub_root={ecsub_download_path}
 ecsub submit \
-    --script ./examples/run-wordcount.sh \
-    --tasks ./examples/tasks-wordcount.tsv \
-    --aws-s3-bucket s3://yourbucket/output/ \
+    --script ${ecsub_root}/examples/run-wordcount.sh \
+    --tasks ${ecsub_root}/examples/tasks-wordcount.tsv \
+    --aws-s3-bucket ${bucket}/output/ \
     --wdir /tmp/ecsub/ \
     --image python:2.7.14 \
     --aws-ec2-instance-type t2.micro \
@@ -88,7 +90,7 @@ ecsub submit \
 
 ### 2) View job report.
 
-```
+```Bash
 ecsub report \
     [--wdir WDIR]
 
@@ -98,7 +100,7 @@ optional arguments:
 
 For example,
 
-```
+```Bash
 ecsub report --wdir /tmp/ecsub/
 ```
 
@@ -113,7 +115,7 @@ ecsub report --wdir /tmp/ecsub/
 ecsub creates logs on AWS CloudWatch.
 If you need, you can download log-files to local directory, and remove log-streams from AWS.
 
-```
+```Bash
 ecsub logs \
     [--wdir WDIR] \
     [--prefix PREFIX] \
@@ -127,7 +129,7 @@ optional arguments:
 
 For example,
 
-```
+```Bash
 ecsub logs --wdir /tmp/ecsub --remove
 ```
 
