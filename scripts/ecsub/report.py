@@ -72,7 +72,7 @@ def main(params):
     for info in info_list:
         _print(info, header, info_wmax)
     
-def entry_point(args):
+def entry_point(args, unknown_args):
 
     params = {
         "wdir": args.wdir.rstrip("/"),

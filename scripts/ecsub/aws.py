@@ -139,12 +139,6 @@ class Aws_ecsub_control:
             
         if not _check_role("ecsInstanceRole", "ec2.amazonaws.com", self.cluster_name):
             result = False
-            
-        #if not _check_role("ecsTaskExecutionRole", "ecs-tasks.amazonaws.com", self.cluster_name):
-        #    result = False
-        #    
-        #if not _check_policy("arn:aws:iam::%s:policy/AmazonECSEventsTaskExecutionRole" % (self.aws_accountid), self.cluster_name):
-        #    result = False
 
         return result
     
