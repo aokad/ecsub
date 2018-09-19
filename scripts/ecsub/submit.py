@@ -198,7 +198,7 @@ def main(params):
     # check task-param
     if aws_instance.check_inputfiles(task_params):
 
-        # tasts to scripts and upload S3    
+        # tasts to scripts and upload S3
         upload_scripts(task_params, 
                        aws_instance, 
                        params["wdir"] + "/script", 

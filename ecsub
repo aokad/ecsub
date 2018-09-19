@@ -49,8 +49,9 @@ def main():
     # log stream 
     log_parser = subparsers.add_parser("logs", help = "download logs")
     log_parser.add_argument("--wdir", help = "{PATH} when 'ecsub submit --wdir {PATH}'", type = str, default = "./")
-    log_parser.add_argument("--prefix", help = "prefix of LogGroupName in AWS CloudWatch", type = str, default = "ecsub")
-    log_parser.add_argument("--remove", help = "flag for remove from AWS", action = 'store_true')
+    log_parser.add_argument("--prefix", help = "prefix of LogGroupName in AWS CloudWatch", type = str, default = "")
+    log_parser.add_argument("--rm", help = "flag for remove from AWS", action = 'store_true')
+    log_parser.add_argument("--dw", help = "flag for download from AWS", action = 'store_true')
     log_parser.set_defaults(func = log.entry_point)
     
     import sys
@@ -59,11 +60,14 @@ def main():
         argv = [""]
         
     (known_args, unknown_args) = parser.parse_known_args(argv)
-    if len(unknown_args) > 0 and len(unknown_args[0]) > 0:
-        print ("This option is invalid.")
-        print (unknown_args)
+    if len(unknown_args) > 0:
+        if '' in unknown_args:
+            unknown_args.remove('')
+        if len(unknown_args) > 0:
+            print ("This option is invalid.")
+            print (unknown_args)
     
-    return known_args.func(known_args)
+    return known_args.func(known_args, unknown_args)
     
 if __name__ == "__main__":
     main()

@@ -86,8 +86,8 @@ class TestSet(unittest.TestCase):
         # download and remove
         options = [
             "--wdir", self.WDIR,
-            "--prefix", "ecsub-" + cluster_name,
-            "--remove"
+            "--prefix", cluster_name,
+            "--rm", "--dw"
         ]
         subprocess.check_call(['python', 'ecsub', 'logs'] + options)
         

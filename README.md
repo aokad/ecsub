@@ -124,13 +124,14 @@ ecsub logs \
 optional arguments:
   --wdir WDIR      {PATH} when 'ecsub submit --wdir {PATH}' (default: "./")
   --prefix PREFIX  prefix of LogGroupName in AWS CloudWatch (default: "ecsub")
-  --remove         flag for remove from AWS (default: False)
+  --dw         flag for download from AWS (default: False)
+  --rm         flag for remove from AWS (default: False)
 ```
 
 For example,
 
 ```Bash
-ecsub logs --wdir /tmp/ecsub --remove
+ecsub logs --wdir /tmp/ecsub --prefix tasks-wordcount --dw
 ```
 
 ## 5. Documentation

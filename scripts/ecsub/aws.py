@@ -696,14 +696,6 @@ EOF
         
         # delete cluster
         if self.cluster_arn != "":
-#            responce = boto3.client('ecs').list_container_instances(cluster=self.cluster_arn)
-#            if len(responce['containerInstanceArns']):
-#                responce2 = boto3.client('ecs').describe_container_instances(cluster=self.cluster_arn, containerInstances=responce['containerInstanceArns'])
-#                instance_ids = ""
-#                for instance in responce2['containerInstances']:
-#                    instance_ids += instance['ec2InstanceId'] + " "
-#                self.terminate_instances (None, instance_ids)
-        
             responce = boto3.client('ecs').describe_clusters(clusters=[self.cluster_arn])
             if len(responce["clusters"]) > 0:
                 cmd_template = "{set_cmd}; aws ecs delete-cluster --cluster {cluster} > {log}"
