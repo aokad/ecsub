@@ -48,7 +48,7 @@ def read_tasksfile(tasks_file, cluster_name):
 
 def write_runsh(task_params, runsh, shell):
    
-    run_template = """set -x
+    run_template = """set -ex
 
 SCRIPT_ENVM_NAME=`basename ${{SCRIPT_ENVM_PATH}}`
 SCRIPT_EXEC_NAME=`basename ${{SCRIPT_EXEC_PATH}}`
@@ -63,7 +63,8 @@ df -h
 
 # exec
 {shell} /${{SCRIPT_EXEC_NAME}}
-df -h
+
+#if [ $? -gt 0 ]; then exit $?; fi
 
 # upload
 {upload_script}

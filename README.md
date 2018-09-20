@@ -22,6 +22,8 @@ python setup.py build install
 
 ## 3. Setup
 
+### 3.1 local machine
+
 First, set up `aws configure`.
 
 ```Bash
@@ -39,6 +41,42 @@ aws s3 mb s3://yourbucket
 ```
 
 Optionally, push your docker image (requires python) to dockerhub or Amazon ECR.
+
+### 3.2 AWS IAM
+
+UserGroup:
+
+1. Create "ecsub-user" group, then attach the following policies.
+
+ - AmazonECS_FullAccess
+ - CloudWatchLogsFullAccess
+ - CloudWatchReadOnlyAccess
+
+Role:
+
+1. Create "ecsInstanceRole" role with AWS EC2, then attach the following policies.
+
+ - AmazonEC2ContainerServiceforEC2Role
+ - S3_S3FullAccess
+ - CloudWatchMetricFullAccess（create yourself. Choose "CloudWatch:*Metric*"）
+
+2. Edit trust, add "allow ecs-tasks"
+
+```Json
+{
+  "Version": "2008-10-17",
+  "Statement": [
+    {
+      "Sid": "",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "ecs-tasks.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+```
 
 ## 4. Run
 
