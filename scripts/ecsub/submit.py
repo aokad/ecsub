@@ -154,13 +154,13 @@ def main(params):
         if params["aws_ecs_task_vcpu"] == 0:
             params["aws_ecs_task_vcpu"] = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["vcpu"]
     else:
-        print (ecsub.tools.info_message (params["cluster_name"], None, "instance-type %s is not defined in ecsub." % (params["aws_ec2_instance_type"])))
+        print (ecsub.tools.info_message (params["task_name"], None, "instance-type %s is not defined in ecsub." % (params["aws_ec2_instance_type"])))
         if params["aws_ecs_task_memory"] == 0:
-            print (ecsub.tools.error_message (params["cluster_name"], None, "--memory option is required."))
+            print (ecsub.tools.error_message (params["task_name"], None, "--memory option is required."))
             undefined = True
 
         if params["aws_ecs_task_vcpu"] == 0:
-            print (ecsub.tools.error_message (params["cluster_name"], None, "--vcpu option is required."))
+            print (ecsub.tools.error_message (params["task_name"], None, "--vcpu option is required."))
             undefined = True
             
     if undefined:
