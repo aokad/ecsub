@@ -650,28 +650,19 @@ EOF
 
         json.dump(responce, open(log_file, "w"), default=support_datetime_default, indent=4, separators=(',', ': '))
         
-        exit_code = None
-        reason = ""
-        
+        exit_code = -1
         if "containers" in responce["tasks"][0]:
-            if "reason" in responce["tasks"][0]["containers"]:
-                reason = responce["tasks"][0]["containers"][0]["reason"]
-            
             if "exitCode" in responce["tasks"][0]["containers"][0]:
                 exit_code = responce["tasks"][0]["containers"][0]["exitCode"]
                 print (ecsub.tools.info_message (self.cluster_name, no, "tasks-stopped with [%d]" % (exit_code)))
-        
-        stoppedReason = ""
-        
-        if "stoppedReason" in responce["tasks"][0]:
-            stoppedReason = responce["tasks"][0]["stoppedReason"]
-                
-        if exit_code != None and exit_code != 0:
-            if reason != "":
-                print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (reason)))
 
-            if stoppedReason != "":
-                print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (stoppedReason)))
+            if "reason" in responce["tasks"][0]["containers"][0]:
+                if exit_code != 0:
+                    print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (responce["tasks"][0]["containers"][0]["reason"])))
+
+        if "stoppedReason" in responce["tasks"][0]:
+            if exit_code != 0:
+                print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (responce["tasks"][0]["stoppedReason"])))
 
         return ec2InstanceId
 
