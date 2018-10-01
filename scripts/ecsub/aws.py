@@ -492,9 +492,22 @@ EOF
 
     def _check_memory(self, log_file):
         log = self._json_load(log_file)
+
+        # failue
+        if log == None:
+            return (None, [])
+        
+        if not "tasks" in log:
+            return (None, [])
+        
+        if not "failures" in log:
+            return (None, [])
+        
+        # success
         if len(log["tasks"]) > 0:
             return (log, None)
         
+        # failure with memory
         error_message = []
         error_message.append("failures: %s" % (json.dumps(log["failures"])))
         
