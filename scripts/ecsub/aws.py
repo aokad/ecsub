@@ -333,7 +333,7 @@ class Aws_ecsub_control:
 
         #  register-task-definition
         log_file = self._log_path("register-task-definition")
-        cmd_template = "{set_cmd}; cat {json}; aws ecs register-task-definition --cli-input-json file://{json} > {log}"
+        cmd_template = "{set_cmd}; aws ecs register-task-definition --cli-input-json file://{json} > {log}"
 
         cmd = cmd_template.format(
             set_cmd = self.set_cmd,
