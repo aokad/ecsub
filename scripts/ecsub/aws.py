@@ -430,6 +430,7 @@ EOF
             "DeviceName":"/dev/xvdcz",
             "Ebs": {
                 "VolumeSize":self.aws_ec2_instance_disk_size,
+                "VolumeType": "gp2",
                 "DeleteOnTermination":True
             }
         }]
