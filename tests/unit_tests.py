@@ -46,7 +46,7 @@ class TestSet(unittest.TestCase):
             "--tasks", "./tests/test-wordcount.tsv",
             "--aws-ec2-instance-type", "t2.micro",
             "--disk-size", "22",
-            "--aws-s3-bucket", "s3://ecsub-ohaio/output/",
+            "--aws-s3-bucket", "s3://travisci-work/wordcount/output/",
         ]
         subprocess.check_call(['python', 'ecsub', 'submit'] + options)
 
@@ -68,7 +68,7 @@ class TestSet(unittest.TestCase):
             "--tasks", "./tests/test-wordcount.tsv",
             "--aws-ec2-instance-type", "t2.micro",
             "--disk-size", "22",
-            "--aws-s3-bucket", "s3://ecsub-ohaio/output/",
+            "--aws-s3-bucket", "s3://travisci-work/wordcount/output/",
         ]
         subprocess.check_call(['python', 'ecsub', 'submit'] + options)
 
