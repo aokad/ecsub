@@ -157,7 +157,7 @@ def entry_point(wdir):
     params = {
         "wdir": wdir,
         "namespace": "ECSUB",
-        "metrics": ["CPUUtilization", "DataStorageUtilization", "MemoryUtilization"],
+        "metrics": ["CPUUtilization", "DataStorageUtilization", "MemoryUtilization", "MemoryUtilization_BK"],
         "instances": instance_list,
         "cluster": {"Name": cluster["clusterName"], "Arn": cluster["clusterArn"]},
         "title": cluster["clusterName"] + ":metrics"

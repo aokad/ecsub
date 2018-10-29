@@ -388,7 +388,7 @@ aws cloudwatch put-metric-data --value \$disk_util --namespace ECSUB --unit Perc
 mem_used=\$(vmstat -s | grep "used memory" | sed s/^" "*/""/ | cut -f 1 -d " ")
 mem_free=\$(vmstat -s | grep "free memory" | sed s/^" "*/""/ | cut -f 1 -d " ")
 mem_util=\$(awk 'BEGIN{{ printf "%.0f\\n", '\$mem_used'*100/('\$mem_used'+'\$mem_free') }}')
-aws cloudwatch put-metric-data --value \$mem_util --namespace ECSUB --unit Percent --metric-name MemoryUtilization --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
+aws cloudwatch put-metric-data --value \$mem_util --namespace ECSUB --unit Percent --metric-name MemoryUtilization_BK --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
 
 sts=(\$(vmstat | tail -n 1))
 cpu_util=\$(awk 'BEGIN{{ printf "%.0f\\n", '\${{sts[12]}}'+'\${{sts[13]}}' }}')
@@ -398,7 +398,7 @@ aws cloudwatch put-metric-data --value \$cpu_util --namespace ECSUB --unit Perce
 mem_total=\$(free | awk '/Mem:/ {{print \$2}}')
 mem_used=\$(free | awk '/buffers\/cache:/ {{print \$3}}')
 mem_util=\$(awk 'BEGIN{{ printf "%.0f\\n", '\$mem_used'*100/'\$mem_total' }}')
-aws cloudwatch put-metric-data --value \$mem_util --namespace ECSUB --unit Percent --metric-name MemoryUtilization2 --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
+aws cloudwatch put-metric-data --value \$mem_util --namespace ECSUB --unit Percent --metric-name MemoryUtilization --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
 
 EOF
 
