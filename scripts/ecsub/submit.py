@@ -7,7 +7,7 @@ Created on Wed Mar 14 13:06:19 2018
 
 import os
 import shutil
-from multiprocessing import Process
+from multiprocessing import Process, Array
 import string
 import random
 import ecsub.aws
@@ -53,16 +53,16 @@ def write_runsh(task_params, runsh, shell):
 SCRIPT_ENVM_NAME=`basename ${{SCRIPT_ENVM_PATH}}`
 SCRIPT_EXEC_NAME=`basename ${{SCRIPT_EXEC_PATH}}`
 
-aws s3 cp ${{SCRIPT_ENVM_PATH}} /${{SCRIPT_ENVM_NAME}} --only-show-errors
-aws s3 cp ${{SCRIPT_EXEC_PATH}} /${{SCRIPT_EXEC_NAME}} --only-show-errors
+aws s3 cp ${{SCRIPT_ENVM_PATH}} ${{SCRIPT_ENVM_NAME}} --only-show-errors
+aws s3 cp ${{SCRIPT_EXEC_PATH}} ${{SCRIPT_EXEC_NAME}} --only-show-errors
 
-source /${{SCRIPT_ENVM_NAME}}
+source ${{SCRIPT_ENVM_NAME}}
 
 {download_script}
 df -h
 
 # exec
-{shell} /${{SCRIPT_EXEC_NAME}}
+{shell} ${{SCRIPT_EXEC_NAME}}
 
 #if [ $? -gt 0 ]; then exit $?; fi
 
@@ -106,10 +106,10 @@ def write_setenv(task_params, setenv, no):
         
         if task_params["header"][i]["type"] == "input":
             f.write('export S3_%s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i]))
-            f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i].replace("s3://", "/AWS_DATA/")))
+            f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i].replace("s3://", "/scratch/AWS_DATA/")))
         elif task_params["header"][i]["type"] == "output":
             f.write('export S3_%s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i]))
-            f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i].replace("s3://", "/AWS_DATA/")))
+            f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i].replace("s3://", "/scratch/AWS_DATA/")))
         elif task_params["header"][i]["type"] == "env":
             f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i]))
             
@@ -137,12 +137,15 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
     
     return True
 
-def submit_task(aws_instance, no):
+def submit_task(aws_instance, no, shared_code):
     
     if aws_instance.run_instances(no):
-        instance_id = aws_instance.run_task(no)
+        [instance_id, exit_code] = aws_instance.run_task(no)
         if instance_id != None:
             aws_instance.terminate_instances(no, instance_id)
+            shared_code[no] = exit_code
+            return
+    shared_code[no] = 1
     
 def main(params):
     
@@ -164,7 +167,7 @@ def main(params):
             undefined = True
             
     if undefined:
-        return -1
+        return 1
     
     # read tasks file
     params["cluster_name"] = params["task_name"]
@@ -175,7 +178,7 @@ def main(params):
 
     task_params = read_tasksfile(params["tasks"], params["cluster_name"])
     if task_params == None:
-        return -1
+        return 1
     
     if task_params["tasks"] == []:
         return 0
@@ -215,19 +218,26 @@ def main(params):
     
                 # run instance and submit task
                 process_list = []
+                shared_code = Array('i', [0]*len(task_params["tasks"]))
                 for i in range(len(task_params["tasks"])):
-                    process = Process(target=submit_task, name="%s_%03d" % (params["cluster_name"], i), args=(aws_instance, i))
+                    process = Process(target=submit_task, name="%s_%03d" % (params["cluster_name"], i), args=(aws_instance, i, shared_code))
                     process.daemon == True
                     process.start()
                     process_list.append(process)
                 
                 for process in process_list:
                     process.join()
-    
-            aws_instance.clean_up()
-            ecsub.metrics.entry_point(params["wdir"])
+                
+                aws_instance.clean_up()
+                ecsub.metrics.entry_point(params["wdir"])
+                
+                #print (shared_code[:])
+                # SUCCESS
+                if [0] == list(set(shared_code[:])):
+                    return 0
             
-            return 0
+            else:
+                aws_instance.clean_up()
             
         except Exception as e:
             print (ecsub.tools.error_message (params["cluster_name"], None, e))

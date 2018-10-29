@@ -33,7 +33,6 @@ class Aws_ecsub_control:
         self.shell = params["shell"]
         self.log_group_name = "ecsub-" + self.cluster_name
         
-        #self.aws_ami_id = ecsub.aws_config.AMI_ID[self.aws_region]
         self.aws_ami_id = ecsub.aws_config.get_ami_id()
         self.aws_ec2_instance_type = params["aws_ec2_instance_type"]
         self.aws_ecs_task_vcpu = params["aws_ecs_task_vcpu"]
@@ -311,16 +310,31 @@ class Aws_ecsub_control:
                               "awslogs-region": self.aws_region,
                               "awslogs-stream-prefix": "ecsub"
                           }
-                      }
+                      },
+                      "mountPoints": [
+                          {
+                              "containerPath": "/scratch",
+                              "sourceVolume": "scratch"
+                          }
+                      ],
+                      "workingDirectory": "/scratch",
                 }
             ],
             "taskRoleArn": ECSTASKROLE,
-            "family": self.cluster_name
+            "family": self.cluster_name,
+            "volumes": [
+                {
+                    "name": "scratch",
+                    "host": {
+                        "sourcePath": "/external"
+                    }
+                }
+            ]
         }
 
         json_file = self._conf_path("task_definition.json")
         json.dump(containerDefinitions, open(json_file, "w"), indent=4, separators=(',', ': '))
-
+        
         # check exists ECS cluster
         cmd_template = "aws logs describe-log-groups --log-group-name-prefix {log_group_name} | grep logGroupName | grep \"{log_group_name}\" | wc -l"
         cmd = cmd_template.format(set_cmd = self.set_cmd, log_group_name = self.log_group_name)
@@ -347,7 +361,6 @@ class Aws_ecsub_control:
         return True
 
     def run_instances (self, no):
-
         sh_file = self._conf_path("userdata.sh")
         open(sh_file, "w").write("""Content-Type: multipart/mixed; boundary="==BOUNDARY=="
 MIME-Version: 1.0
@@ -357,48 +370,19 @@ Content-Type: text/cloud-boothook; charset="us-ascii"
 
 # Install nfs-utils
 cloud-init-per once yum_update yum update -y
-cloud-init-per once install_nfs_utils yum install -y nfs-utils
 cloud-init-per once install_tr yum install -y tr
 cloud-init-per once install_td yum install -y td
 cloud-init-per once install_python27_pip yum install -y python27-pip
 cloud-init-per once install_awscli pip install awscli
 
-cloud-init-per once docker_options echo 'OPTIONS="${{OPTIONS}} --storage-opt dm.basesize={disk_size}G"' >> /etc/sysconfig/docker
 cloud-init-per once ecs_option echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
-
-#!/bin/bash
-# Set any ECS agent configuration options
-# echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
 
 cat << EOF > /root/metricscript.sh
 AWSREGION={region}
 AWSINSTANCEID=\$(curl -ss http://169.254.169.254/latest/meta-data/instance-id)
 ECS_CLUSTER_NAME=\$(cat /etc/ecs/ecs.config | grep ^ECS_CLUSTER | cut -d "/" -f 2)
 
-function convertUnits {{
-
-  unit=\$(echo \$1 | tr -d [0-9.] | tr '[:upper:]' '[:lower:]')
-  value=\$(echo \$1 | tr -d [A-Za-z,])
-  
-  if [ "\$unit" == "b" ] ; then
-    echo \$value
-  elif [ "\$unit" == "kb" ] ; then
-    awk 'BEGIN{{ printf "%.0f\\n", '\$value' * 1000 }}'
-  elif [ "\$unit" == "mb" ] ; then
-    awk 'BEGIN{{ printf "%.0f\\n", '\$value' * 1000**2 }}'
-  elif [ "\$unit" == "gb" ] ; then
-    awk 'BEGIN{{ printf "%.0f\\n", '\$value' * 1000**3 }}'
-  elif [ "\$unit" == "tb" ] ; then
-    awk 'BEGIN{{ printf "%.0f\\n", '\$value' * 1000**4 }}'
-  else
-    echo "Unknown unit \$unit"
-    exit 1
-  fi
-}}
-
-disk_used=\$(convertUnits \$(docker info | awk '/Data Space Used/ {{print \$4}}'))
-disk_total=\$(convertUnits \$(docker info | awk '/Data Space Total/ {{print \$4}}'))
-disk_util=\$(awk 'BEGIN{{ printf "%.0f\\n", '\$disk_used'*100/('\$disk_total') }}')
+disk_util=\$(df /external | awk '/external/ {{print \$5}}' | awk -F% '{{print \$1}}')
 aws cloudwatch put-metric-data --value \$disk_util --namespace ECSUB --unit Percent --metric-name DataStorageUtilization --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
 
 mem_used=\$(vmstat -s | grep "used memory" | sed s/^" "*/""/ | cut -f 1 -d " ")
@@ -421,19 +405,33 @@ HOME=/
 */1 * * * * root /root/metricscript.sh
 */30 * * * * cat /dev/null > /var/spool/mail/root
 EOF
+
+cloud-init-per once mkfs_xvdb mkfs -t ext4 /dev/xvdb
+cloud-init-per once mkdir_external mkdir /external
+cloud-init-per once mount_xvdb mount /dev/xvdb /external
 --==BOUNDARY==--
 """.format(cluster_arn = self.cluster_arn, disk_size = self.aws_ec2_instance_disk_size, region = self.aws_region))
 
         log_file = self._log_path("run-instances.%03d" % (no))
 
-        block_device_mappings = [{
+        block_device_mappings = [
+        {
             "DeviceName":"/dev/xvdcz",
             "Ebs": {
-                "VolumeSize":self.aws_ec2_instance_disk_size,
+                "VolumeSize": 22,
                 "VolumeType": "gp2",
                 "DeleteOnTermination":True
             }
-        }]
+        },
+        {
+            "DeviceName":"/dev/sdb",
+            "Ebs": {
+                "VolumeSize": self.aws_ec2_instance_disk_size,
+                "VolumeType": "gp2",
+                "DeleteOnTermination":True
+            }
+        }
+        ]
         json_file = self._conf_path("block_device_mappings.json")
         json.dump(block_device_mappings, open(json_file, "w"), indent=4, separators=(',', ': '))
         subnet_id = ""
@@ -575,7 +573,7 @@ EOF
             if log == None:
                 for msg in err_msg:
                     print (ecsub.tools.error_message (self.cluster_name, no, msg))
-                return None
+                return [None, None]
 
         # get instance-ID from task-ID
         task_arn = log["tasks"][0]["taskArn"]
@@ -664,7 +662,7 @@ EOF
 
         json.dump(responce, open(log_file, "w"), default=support_datetime_default, indent=4, separators=(',', ': '))
         
-        exit_code = -1
+        exit_code = 1
         if "containers" in responce["tasks"][0]:
             if "exitCode" in responce["tasks"][0]["containers"][0]:
                 exit_code = responce["tasks"][0]["containers"][0]["exitCode"]
@@ -678,7 +676,7 @@ EOF
             if exit_code != 0:
                 print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (responce["tasks"][0]["stoppedReason"])))
 
-        return ec2InstanceId
+        return [ec2InstanceId, exit_code]
 
     def terminate_instances (self, no, instance_id):
 
