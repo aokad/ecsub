@@ -406,9 +406,9 @@ HOME=/
 */30 * * * * cat /dev/null > /var/spool/mail/root
 EOF
 
-cloud-init-per once mkfs_xvdb mkfs -t ext4 /dev/xvdb
+cloud-init-per once mkfs_sdb mkfs -t ext4 /dev/sdb
 cloud-init-per once mkdir_external mkdir /external
-cloud-init-per once mount_xvdb mount /dev/xvdb /external
+cloud-init-per once mount_sdb mount /dev/sdb /external
 --==BOUNDARY==--
 """.format(cluster_arn = self.cluster_arn, disk_size = self.aws_ec2_instance_disk_size, region = self.aws_region))
 
