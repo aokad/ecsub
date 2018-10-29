@@ -393,6 +393,13 @@ aws cloudwatch put-metric-data --value \$mem_util --namespace ECSUB --unit Perce
 sts=(\$(vmstat | tail -n 1))
 cpu_util=\$(awk 'BEGIN{{ printf "%.0f\\n", '\${{sts[12]}}'+'\${{sts[13]}}' }}')
 aws cloudwatch put-metric-data --value \$cpu_util --namespace ECSUB --unit Percent --metric-name CPUUtilization --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
+
+# new
+mem_total=\$(free | awk '/Mem:/ {{print \$2}}')
+mem_used=\$(free | awk '/buffers\/cache:/ {{print \$3}}')
+mem_util=\$(awk 'BEGIN{{ printf "%.0f\\n", '\$mem_used'*100/'\$mem_total' }}')
+aws cloudwatch put-metric-data --value \$mem_util --namespace ECSUB --unit Percent --metric-name MemoryUtilization2 --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
+
 EOF
 
 chmod +x /root/metricscript.sh
