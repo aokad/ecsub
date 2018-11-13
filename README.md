@@ -48,6 +48,8 @@ UserGroup:
 
 1. Create "ecsub-user" group, then attach the following policies.
 
+ - AmazonEC2FullAccess
+ - S3_S3FullAccess (It is better to limit "Resource:")
  - AmazonECS_FullAccess
  - CloudWatchLogsFullAccess
  - CloudWatchReadOnlyAccess
@@ -58,7 +60,7 @@ Role:
 
  - AmazonEC2ContainerServiceforEC2Role
  - S3_S3FullAccess
- - CloudWatchMetricFullAccess（create yourself. Choose "CloudWatch:*Metric*"）
+ - CloudWatchMetricFullAccess（create yourself. Choose "CloudWatch:\*Metric\*"）
 
 2. Edit trust, add "allow ecs-tasks"
 
