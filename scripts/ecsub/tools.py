@@ -33,7 +33,16 @@ def error_message (title, no, text):
 
 def info_message (title, no, text):
     return message (title, no, [{"text": " %s" % (text)}])
+
+def base64_encode(text):
+    import six
     
+    if six.PY2:
+        return text.encode('base64')
+    
+    import base64
+    return base64.b64encode(text.encode('utf-8'))
+
 def main():
     pass
 

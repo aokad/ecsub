@@ -50,6 +50,12 @@ class Aws_ecsub_control:
         self.s3_script = ""
         self.s3_setenv = []
         
+        self.spot = params["spot"]
+        self.spot_az = ""
+        self.spot_params = params["spot_params"]
+        self.spot_price = 0
+        self.od_price = self.get_ondemand_price()
+        
     def _subprocess_communicate (self, cmd):
         responce = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).communicate()[0]
         if type(responce) == type(b''):
@@ -80,6 +86,17 @@ class Aws_ecsub_control:
             if len(line.rstrip()) > 0:
                 sys.stdout.write(line)
 
+    def check_awsconfigure(self):
+        if ecsub.aws_config.region_to_location(self.aws_region) == None:
+            print(ecsub.tools.error_message (self.cluster_name, None, "region '%s' can not be used in ecsub." % (self.aws_region)))
+            return False
+        
+        if self.od_price == 0:
+            print(ecsub.tools.error_message (self.cluster_name, None, "instance-type %s can not be used in region '%s'." % (self.aws_ec2_instance_type, self.aws_region)))
+            return False
+        
+        return True
+    
     def check_inputfiles(self, tasks):
 
         for task in tasks["tasks"]:
@@ -275,8 +292,8 @@ class Aws_ecsub_control:
                 AWS_REGION = self.aws_region,
                 IMAGE_NAME = self.image)
 
-        print(ecsub.tools.info_message (self.cluster_name, None, "ECSTASKROLE: %s" % (ECSTASKROLE)))
-        print(ecsub.tools.info_message (self.cluster_name, None, "DOCKER_IMAGE: %s" % (IMAGE_ARN)))
+        print(ecsub.tools.info_message (self.cluster_name, None, "EcsTaskRole: %s" % (ECSTASKROLE)))
+        print(ecsub.tools.info_message (self.cluster_name, None, "DockerImage: %s" % (IMAGE_ARN)))
         
         containerDefinitions = {
             "containerDefinitions": [
@@ -360,9 +377,8 @@ class Aws_ecsub_control:
 
         return True
 
-    def run_instances (self, no):
-        sh_file = self._conf_path("userdata.sh")
-        open(sh_file, "w").write("""Content-Type: multipart/mixed; boundary="==BOUNDARY=="
+    def _userdata(self):
+        return """Content-Type: multipart/mixed; boundary="==BOUNDARY=="
 MIME-Version: 1.0
 
 --==BOUNDARY==
@@ -417,30 +433,65 @@ cloud-init-per once mkfs_sdb mkfs -t ext4 /dev/sdb
 cloud-init-per once mkdir_external mkdir /external
 cloud-init-per once mount_sdb mount /dev/sdb /external
 --==BOUNDARY==--
-""".format(cluster_arn = self.cluster_arn, disk_size = self.aws_ec2_instance_disk_size, region = self.aws_region))
+""".format(cluster_arn = self.cluster_arn, disk_size = self.aws_ec2_instance_disk_size, region = self.aws_region)
+
+    def _getblock_device_mappings(self):
+        return [
+            {
+                "DeviceName":"/dev/xvdcz",
+                "Ebs": {
+                    "VolumeSize": 22,
+                    "VolumeType": "gp2",
+                    "DeleteOnTermination":True
+                }
+            },
+            {
+                "DeviceName":"/dev/sdb",
+                "Ebs": {
+                    "VolumeSize": self.aws_ec2_instance_disk_size,
+                    "VolumeType": "gp2",
+                    "DeleteOnTermination":True
+                }
+            }
+        ]
+    def _wait_run_instance(self, instance_id, no):
+        
+        if instance_id != "":
+            cmd_template = "{set_cmd}; aws ec2 wait instance-running --instance-ids {INSTANCE_ID}"
+            cmd = cmd_template.format(
+                set_cmd = self.set_cmd,
+                INSTANCE_ID = instance_id
+            )
+            self._subprocess_call(cmd, no)
+    
+            cmd_template = "{set_cmd}; aws ec2 wait instance-status-ok --include-all-instances --instance-ids {INSTANCE_ID}"
+            cmd = cmd_template.format(
+                set_cmd = self.set_cmd,
+                INSTANCE_ID = instance_id
+            )
+            self._subprocess_call(cmd, no)
+    
+            for i in range(3):
+                responce = boto3.client("ec2").describe_instance_status(InstanceIds=[instance_id])
+                if responce['InstanceStatuses'][0]['InstanceStatus']['Status'] == "ok":
+                    return True
+                self._subprocess_call(cmd, no)
+    
+        print(ecsub.tools.error_message (self.cluster_name, None, "Failure run instance."))
+        return False
+    
+    def run_instances_ondemand (self, no):
+        userdata_file = self._conf_path("userdata.%03d.sh" % (no))
+        userdata_text = self._userdata()
+        
+        open(userdata_file, "w").write(userdata_text)
 
         log_file = self._log_path("run-instances.%03d" % (no))
 
-        block_device_mappings = [
-        {
-            "DeviceName":"/dev/xvdcz",
-            "Ebs": {
-                "VolumeSize": 22,
-                "VolumeType": "gp2",
-                "DeleteOnTermination":True
-            }
-        },
-        {
-            "DeviceName":"/dev/sdb",
-            "Ebs": {
-                "VolumeSize": self.aws_ec2_instance_disk_size,
-                "VolumeType": "gp2",
-                "DeleteOnTermination":True
-            }
-        }
-        ]
-        json_file = self._conf_path("block_device_mappings.json")
-        json.dump(block_device_mappings, open(json_file, "w"), indent=4, separators=(',', ': '))
+        block_device_mappings = self._getblock_device_mappings()
+        
+        bd_mappings_file = self._conf_path("block_device_mappings.%03d.json" % (no))
+        json.dump(block_device_mappings, open(bd_mappings_file, "w"), indent=4, separators=(',', ': '))
         subnet_id = ""
         if self.aws_subnet_id != "":
             subnet_id = "--subnet-id %s" % (self.aws_subnet_id)
@@ -464,38 +515,197 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             KEY_NAME = self.aws_key_name,
             subnet_id = subnet_id,
             instance_type = self.aws_ec2_instance_type,
-            json = json_file,
+            json = bd_mappings_file,
             INDEX = no,
-            userdata = sh_file,
+            userdata = userdata_file,
             log = log_file
         )
         self._subprocess_call(cmd, no)
         log = self._json_load(log_file)
         instance_id = log["Instances"][0]["InstanceId"]
         
-        cmd_template = "{set_cmd}; aws ec2 wait instance-running --instance-ids {INSTANCE_ID}"
+        return self._wait_run_instance(instance_id, no)
+    
+    def get_ondemand_price (self):
+        response = boto3.client('pricing', region_name = "ap-south-1").get_products(
+            ServiceCode='AmazonEC2',
+            Filters = [
+                {'Type' :'TERM_MATCH', 'Field':'instanceType',    'Value': self.aws_ec2_instance_type},
+                {'Type' :'TERM_MATCH', 'Field':'location',        'Value': ecsub.aws_config.region_to_location(self.aws_region)},
+                {'Type' :'TERM_MATCH', 'Field':'operatingSystem', 'Value': 'Linux'},
+                {'Type' :'TERM_MATCH', 'Field':'tenancy',         'Value': 'Shared'},
+                {'Type' :'TERM_MATCH', 'Field':'preInstalledSw',  'Value': 'NA'},
+                {'Type' :'TERM_MATCH', 'Field':'capacitystatus',  'Value': 'Used'},
+            ],
+            MaxResults=100
+        )
+        
+        values = []
+        try:
+            for i in range(len(response["PriceList"])):
+                obj = json.loads(response["PriceList"][i])
+                for key1 in obj["terms"]["OnDemand"].keys():
+                    for key2 in obj["terms"]["OnDemand"][key1]["priceDimensions"].keys():
+                        values.append(obj["terms"]["OnDemand"][key1]["priceDimensions"][key2]["pricePerUnit"]["USD"])
+        except Exception as e:
+            print (e)
+            return 0
+        
+        values.sort()
+        if len(values) > 0:
+            print(ecsub.tools.info_message (self.cluster_name, None, "Instance Type: %s, Ondemand Price: %s USD" % (self.aws_ec2_instance_type, values[-1])))
+            return float(values[-1])
+        
+        return 0
+    
+    def set_spot_price (self):
+        
+        now = datetime.datetime.utcnow()
+        start_dt = now - datetime.timedelta(days = 6)
+        response = boto3.client('ec2').describe_spot_price_history(
+            Filters = [{"Name":'product-description', "Values": ['Linux/UNIX']}],
+            InstanceTypes = [self.aws_ec2_instance_type],
+            MaxResults = 100,
+            StartTime = start_dt,
+            EndTime = now,
+        )
+        
+        spot_prices = {}
+        try:
+            for his in response["SpotPriceHistory"]:
+                az = his['AvailabilityZone']
+                if not az in spot_prices:
+                    spot_prices[az] = []
+                spot_prices[az].append(float(his['SpotPrice']))
+        except Exception as e:
+            print (e)                
+            return False
+    
+        price = {"az": "", "price": -1}
+        for key in spot_prices.keys():
+            new_price = sum(spot_prices[key])/len(spot_prices[key])
+            if (price["price"] < 0) or (price["price"] > new_price):
+                price["price"] = new_price
+                price["az"] = key
+
+        if price["price"] < 0:
+            print(ecsub.tools.error_message (self.cluster_name, None, "failure describe_spot_price_history."))
+            return False
+        
+        if price["price"] > self.od_price * 0.98:
+            print(ecsub.tools.error_message (self.cluster_name, None, "spot price %f is close to ondemand price %f." % (price["price"], self.od_price)))
+            return False
+        
+        self.spot_price = price["price"]
+        self.spot_az = price["az"]
+        print(ecsub.tools.info_message (self.cluster_name, None, "Spot Price: %s USD, Availality Zone: %s" % (price["price"], price["az"])))
+        return True
+        
+    def run_instances_spot (self, no):
+        
+        userdata_text = ecsub.tools.base64_encode(self._userdata())
+        block_device_mappings = self._getblock_device_mappings()
+        
+        specification = {
+            "SecurityGroupIds": [ self.aws_security_group_id ],
+            "BlockDeviceMappings": block_device_mappings,
+            "IamInstanceProfile": {
+                "Name": "ecsInstanceRole"
+            },
+            "ImageId": self.aws_ami_id,
+            "InstanceType": self.aws_ec2_instance_type,
+            "KeyName": self.aws_key_name,
+            "Placement": {
+                "AvailabilityZone": self.spot_az,
+            },
+            "UserData": userdata_text.decode()
+        }
+                        
+        if self.aws_subnet_id != "":
+            specification["subnet_id"] = self.aws_subnet_id
+        
+        specification_file = self._conf_path("specification_file.%03d.json" % (no))
+        json.dump(specification, open(specification_file, "w"), indent=4, separators=(',', ': '))
+        
+        log_file = self._log_path("request-spot-instances.%03d" % (no))
+        
+        spot_price = ""
+        #if self.spot_price > 0:
+        #    spot_price = " --spot-price {spot_price}".format(spot_price = spot_price)
+           
+        cmd_template = "{set_cmd};" \
+            + "aws ec2 request-spot-instances" \
+            + "{spot_price}" \
+            + " --instance-count 1" \
+            + " --type 'one-time'" \
+            + " --launch-specification file://{specification_file}" \
+            + " > {log}"                                
+        
         cmd = cmd_template.format(
             set_cmd = self.set_cmd,
-            INSTANCE_ID = instance_id
+            spot_price = spot_price,
+            specification_file = specification_file,
+            log = log_file
         )
-        self._subprocess_call(cmd, no)
 
-        cmd_template = "{set_cmd}; aws ec2 wait instance-status-ok --include-all-instances --instance-ids {INSTANCE_ID}"
+        self._subprocess_call(cmd, no)
+        log = self._json_load(log_file)
+        request_id = ""
+        try:
+            request_id = log["SpotInstanceRequests"][0]["SpotInstanceRequestId"]
+        except Exception:
+            print(ecsub.tools.error_message (self.cluster_name, None, "Failure request-spot-instances."))
+            return False
+        
+        cmd_template = "{set_cmd}; aws ec2 wait spot-instance-request-fulfilled --spot-instance-request-ids {REQUEST_ID}"
         cmd = cmd_template.format(
             set_cmd = self.set_cmd,
-            INSTANCE_ID = instance_id
+            REQUEST_ID = request_id
         )
         self._subprocess_call(cmd, no)
-
-        for i in range(3):
-            responce = boto3.client("ec2").describe_instance_status(InstanceIds=[instance_id])
-            if responce['InstanceStatuses'][0]['InstanceStatus']['Status'] == "ok":
-                return True
-            self._subprocess_call(cmd, no)
-
-        print(ecsub.tools.error_message (self.cluster_name, None, "Failure run instance."))
+        
+        cmd2_template = "{set_cmd}; aws ec2 describe-spot-instance-requests --spot-instance-request-ids {REQUEST_ID} > {log}"
+        
+        instance_id = ""
+        try:
+            for i in range(3):
+                log_file = self._log_path("describe-spot-instance-requests.%03d.%d" % (no, i))
+                cmd2 = cmd2_template.format(
+                    set_cmd = self.set_cmd,
+                    REQUEST_ID = request_id,
+                    log = log_file
+                )
+                self._subprocess_call(cmd2, no)
+                responce = self._json_load(log_file)
+                
+                if responce['SpotInstanceRequests'][0]['State'] == "active":
+                    if responce['SpotInstanceRequests'][0]['Status']['Code'] == 'fulfilled':
+                        instance_id = responce['SpotInstanceRequests'][0]['InstanceId']
+                        break
+                
+                elif responce['SpotInstanceRequests'][0]['State'] == "open":
+                    if responce['SpotInstanceRequests'][0]['Status']['Code'] == 'pending-evaluation':
+                        self._subprocess_call(cmd, no)
+                    else:
+                        break
+                else:
+                    break
+                
+            if instance_id == "":
+                print(ecsub.tools.error_message (self.cluster_name, None, "Failure request-spot-instances. [Status] %s [Code] %s [Message] %s" % 
+                    (responce['SpotInstanceRequests'][0]['State'],
+                     responce['SpotInstanceRequests'][0]['Status']['Code'],
+                     responce['SpotInstanceRequests'][0]['Status']['Message'])
+                ))
+            else:
+                return self._wait_run_instance(instance_id, no)
+            
+        except Exception as e:
+            print (e)
+        
+        self.cancel_spot_instance_requests (no = no, spot_req_id = request_id)
         return False
-
+        
     def _check_memory(self, log_file):
         log = self._json_load(log_file)
 
@@ -683,9 +893,29 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             if exit_code != 0:
                 print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (responce["tasks"][0]["stoppedReason"])))
 
-        return [ec2InstanceId, exit_code]
+        cancel = False
+        if exit_code != 0 and self.spot:
+            cancel = True
+            
+        return [ec2InstanceId, exit_code, cancel]
 
-    def terminate_instances (self, no, instance_id):
+    def _instance_id_to_spotrequest (self, instance_id):
+        responce = boto3.client("ec2").describe_spot_instance_requests(
+            Filters = [
+                {"Name":"instance-id", "Values": [instance_id]}
+            ]
+        )
+        
+        if not 'SpotInstanceRequests' in responce:
+            return None
+        
+        state = responce['SpotInstanceRequests'][0]['State']
+        if state == "active" or state == "open":
+            return responce['SpotInstanceRequests'][0]['SpotInstanceRequestId']
+        
+        return None
+    
+    def terminate_instances (self, instance_id, no = None):
 
         log_file = self._log_path("terminate-instances")
         if no != None:
@@ -701,17 +931,57 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             ec2InstanceId = instance_id
         )
         self._subprocess_call(cmd, no)
+    
+    def cancel_spot_instance_requests (self, no = None, instance_id = None, spot_req_id = None):
+        
+        log_file = self._log_path("cancel-spot-instance-requests")
+        if no != None:
+            log_file = self._log_path("cancel-spot-instance-requests.%03d" % (no))
+    
+        if spot_req_id == None:        
+            spot_req_id = self._instance_id_to_spotrequest (instance_id)
+        
+        if spot_req_id != None:
+            cmd_template = "{set_cmd};" \
+                + "aws ec2 cancel-spot-instance-requests --spot-instance-request-ids {spot_req_id} > {log}"
+
+            cmd = cmd_template.format(
+                set_cmd = self.set_cmd,
+                log = log_file,
+                spot_req_id = spot_req_id
+            )
+            self._subprocess_call(cmd, no)
         
     def clean_up (self):
+        
         # terminate instances
         instance_ids = []
         for log_file in glob.glob("%s/log/run-instances.*.log" % (self.wdir)):
             log = self._json_load(log_file)
             instance_ids.append(log["Instances"][0]["InstanceId"])
+        
+        for log_file in glob.glob("%s/log/describe-spot-instance-requests.*.log" % (self.wdir)):
+            log = self._json_load(log_file)
+            try:
+                instance_ids.append(log["SpotInstanceRequests"][0]["InstanceId"])
+            except Exception:
+                pass
             
         if len(instance_ids) > 0:
-            self.terminate_instances (None, " ".join(instance_ids))
+            self.terminate_instances (" ".join(instance_ids))
         
+        # cancel_spot_instance_requests
+        req_ids = []
+        for log_file in glob.glob("%s/log/request-spot-instances.*.log" % (self.wdir)):
+            log = self._json_load(log_file)
+            try:
+                req_ids.append(log["SpotInstanceRequests"][0]["SpotInstanceRequestId"])
+            except Exception:
+                pass
+            
+        if len(req_ids) > 0:
+            self.cancel_spot_instance_requests (spot_req_id = " ".join(req_ids))
+            
         # delete cluster
         if self.cluster_arn != "":
             responce = boto3.client('ecs').describe_clusters(clusters=[self.cluster_arn])

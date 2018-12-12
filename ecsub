@@ -38,6 +38,8 @@ def main():
     submit_parser.add_argument("--aws-security-group-id", help = "AWS your security_group_id", type = str, default = "")
     submit_parser.add_argument("--aws-key-name", help = "AWS your key pair name", type = str, default = "")
     submit_parser.add_argument("--aws-subnet-id", help = "AWS subnet_id", type = str, default = "")
+    submit_parser.add_argument("--spot", help = "use spot instance", action = 'store_true')
+    submit_parser.add_argument("--spot-params", help = "AWS request-spot-instances params", type = str, default = "")
     submit_parser.set_defaults(func = submit.entry_point)
     
     ##########

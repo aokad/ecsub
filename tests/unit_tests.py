@@ -45,11 +45,25 @@ class TestSet(unittest.TestCase):
             "--script", "./examples/run-wordcount.sh",
             "--tasks", "./tests/test-wordcount.tsv",
             "--aws-ec2-instance-type", "t2.micro",
-            "--disk-size", "22",
+            "--disk-size", "1",
             "--aws-s3-bucket", "s3://travisci-work/wordcount/output/",
         ]
         subprocess.check_call(['python', 'ecsub', 'submit'] + options)
 
+    def test2_02_submit(self):
+        options = [
+            "--wdir", self.WDIR,
+            "--image", "python:2-alpine3.6",
+            "--shell", "ash",
+            "--script", "./examples/run-wordcount.sh",
+            "--tasks", "./tests/test-wordcount.tsv",
+            "--aws-ec2-instance-type", "t2.micro",
+            "--disk-size", "1",
+            "--aws-s3-bucket", "s3://travisci-work/wordcount/output/",
+            "--spot",
+        ]
+        subprocess.check_call(['python', 'ecsub', 'submit'] + options)
+        
     def test3_01_report(self):
         options = [
             "--wdir", self.WDIR
@@ -67,7 +81,7 @@ class TestSet(unittest.TestCase):
             "--script", "./examples/run-wordcount.sh",
             "--tasks", "./tests/test-wordcount.tsv",
             "--aws-ec2-instance-type", "t2.micro",
-            "--disk-size", "22",
+            "--disk-size", "1",
             "--aws-s3-bucket", "s3://travisci-work/wordcount/output/",
         ]
         subprocess.check_call(['python', 'ecsub', 'submit'] + options)

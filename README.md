@@ -9,6 +9,7 @@
  - python >= 2.7
  - [awscli](https://docs.aws.amazon.com/streams/latest/dev/kinesis-tutorial-cli-installation.html)
  - [boto3](https://github.com/boto/boto3)
+ - six
 
 ## 2. Install
 
@@ -49,6 +50,7 @@ UserGroup:
 1. Create "ecsub-user" group, then attach the following policies.
 
  - AmazonECS_FullAccess
+ - AWSPriceListServiceFullAccess 
  - CloudWatchLogsFullAccess
  - CloudWatchReadOnlyAccess
 
@@ -85,30 +87,30 @@ Role:
 ```Bash
 ecsub submit \
     --script SCRIPT \
-    --tasks  TASKS \
-    --aws-s3-bucket AWS_S3_BUCKET \
-    [--aws-ec2-instance-type AWS_EC2_INSTANCE_TYPE] \
-    [--disk-size DISK_SIZE] \
-    [--aws-security-group-id AWS_SECURITY_GROUP_ID )] \
-    [--aws-key-name AWS_KEY_NAME] \
-    [--aws-subnet-id AWS_SUBNET_ID] \
-    [--wdir WDIR] \
+    --tasks TASKS \
+    --aws-s3-bucket AWS_S3_BUCKET
     [--image IMAGE] \
-    [--use_amazon_ecr USE_AMAZON_ECR] \
-    [--shell SHELL] \
-    [--task-name TASK_NAME]
+    [--aws-ec2-instance-type INSTANCE_TYPE] \
+    [--disk-size DISK_SIZE]
 
 optional arguments:
-  --wdir WDIR                     output temporary data (default: "./")
-  --image IMAGE                   docker image (default: "python:2.7.14")
-  --use_amazon_ecr                use_amazon_ecr (default: False)
-  --shell SHELL                   path to "bash" or "ash" (or "dash", ...) in docker-container (default: "/bin/bash")
-  --task-name TASK_NAME           submit name as AWS ECS cluster name (default: ${filename of "tasks" option}-${random 5 letters})
   --aws-ec2-instance-type TYPE    AWS instance type (default: "t2.micro")
-  --disk-size DISK_SIZE           AWS disk size (Gib) (default: 22)
-  --aws-security-group-id SG_ID   AWS your security_group_id (default: (your "default" security group id)
   --aws-key-name KEY_NAME         AWS your key pair name (default: (automatic create))
+  --aws-s3-bucket AWS_S3_BUCKET   AWS your S3 bucket
+  --aws-security-group-id SG_ID   AWS your security_group_id (default: (your "default" security group id)
   --aws-subnet-id SUBNET_ID       AWS your subnet_id (default: (your "default" VPC's "default" subnet id)
+  --disk-size DISK_SIZE           AWS disk size (Gib) (default: 22)
+  --image IMAGE                   docker image (default: "python:2.7.14")
+  --memory MEMORY                 Memory used by AWS ECS task
+  --script SCRIPT                 run script
+  --shell SHELL                   path to "bash" or "ash" (or "dash", ...) in docker-container (default: "/bin/bash")
+  --spot                          use spot instance
+  --spot-params SPOT_PARAMS       AWS request-spot-instances params
+  --task-name TASK_NAME           submit name as AWS ECS cluster name (default: ${filename of "tasks" option}-${random 5 letters})
+  --tasks TASKS                   parameters
+  --use_amazon_ecr                use_amazon_ecr (default: False)
+  --vcpu VCPU                     vCpu used by AWS ECS task
+  --wdir WDIR                     output temporary data (default: "./")
 ```
 
 For example,

@@ -10,6 +10,7 @@ import shutil
 from multiprocessing import Process, Array
 import string
 import random
+import datetime
 import ecsub.aws
 import ecsub.tools
 import ecsub.metrics
@@ -138,15 +139,78 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
     
     return True
 
-def submit_task(aws_instance, no, shared_code):
+def submit_task_ondemand(aws_instance, no, shared_code):
     
-    if aws_instance.run_instances(no):
-        [instance_id, exit_code] = aws_instance.run_task(no)
+    if aws_instance.run_instances_ondemand (no):
+        (instance_id, exit_code, stop) = aws_instance.run_task(no)
         if instance_id != None:
-            aws_instance.terminate_instances(no, instance_id)
+            aws_instance.terminate_instances(instance_id, no)
+            return exit_code
+        
+    return 1
+
+def submit_task_spot(aws_instance, no, shared_code):
+    
+    retry = False
+    exit_code = 1
+    if aws_instance.run_instances_spot (no):
+        (instance_id, exit_code, stop) = aws_instance.run_task(no)
+        print (instance_id, exit_code, stop)
+        if stop:
+            retry = True
+            
+        if instance_id != None:
+            aws_instance.terminate_instances(instance_id, no)
+            aws_instance.cancel_spot_instance_requests (no = no, instance_id = instance_id)
             shared_code[no] = exit_code
-            return
-    shared_code[no] = 1
+    else:
+        retry = True
+        
+    return (exit_code, retry)
+               
+def submit_task(aws_instance, no, shared_code, spot):
+    
+    timer = {
+        "ondemand": {"start": None, "end": None},
+        "spot":     {"start": None, "end": None}
+    }
+    
+    if spot:
+        timer["spot"]["start"] = datetime.datetime.now()
+        (exit_code, retry) = submit_task_spot(aws_instance, no, shared_code)
+        timer["spot"]["end"] = datetime.datetime.now()
+        print (exit_code, retry)
+        if retry:
+            timer["ondemand"]["start"] = datetime.datetime.now()
+            (exit_code, retry) = submit_task_ondemand(aws_instance, no, shared_code)
+            timer["ondemand"]["end"] = datetime.datetime.now()
+    else:
+        timer["ondemand"]["start"] = datetime.datetime.now()
+        exit_code = submit_task_ondemand(aws_instance, no, shared_code)
+        timer["ondemand"]["end"] = datetime.datetime.now()
+    
+    ondemand_time = 0
+    if timer["ondemand"] != None:
+        ondemand_time = (timer["ondemand"]["end"] - timer["ondemand"]["start"]).total_seconds()/3600.0
+    
+    spot_time = 0
+    if timer["spot"] != None:
+        spot_time = (timer["spot"]["end"] - timer["spot"]["start"]).total_seconds()/3600.0
+    
+    if spot:                    
+        print (ecsub.tools.info_message (aws_instance.cluster_name, no, 
+                "The cost of this job is %.2f USD. (ondemand: %f USD * %.2f Hour, spot: %f USD * %.2f Hour)" % (
+                ondemand_time * aws_instance.od_price + spot_time * aws_instance.spot_price,
+                aws_instance.od_price, ondemand_time,
+                aws_instance.spot_price, spot_time)
+        ))
+    else:
+        print (ecsub.tools.info_message (aws_instance.cluster_name, no, 
+                "The cost of this job is %.2f USD. (ondemand: %f USD * %.2f Hour)" % (
+                ondemand_time * aws_instance.od_price,
+                aws_instance.od_price, ondemand_time)
+        ))
+    shared_code[no] = exit_code
     
 def main(params):
     
@@ -201,6 +265,13 @@ def main(params):
     aws_instance = ecsub.aws.Aws_ecsub_control(params)
     
     # check task-param
+    if not aws_instance.check_awsconfigure():
+        return 1
+    
+    if params["spot"] == True:
+        if not aws_instance.set_spot_price():
+            return 1
+        
     if aws_instance.check_inputfiles(task_params):
 
         # tasts to scripts and upload S3
@@ -221,7 +292,7 @@ def main(params):
                 process_list = []
                 shared_code = Array('i', [0]*len(task_params["tasks"]))
                 for i in range(len(task_params["tasks"])):
-                    process = Process(target=submit_task, name="%s_%03d" % (params["cluster_name"], i), args=(aws_instance, i, shared_code))
+                    process = Process(target=submit_task, name="%s_%03d" % (params["cluster_name"], i), args=(aws_instance, i, shared_code, params["spot"]))
                     process.daemon == True
                     process.start()
                     process_list.append(process)
@@ -267,6 +338,8 @@ def entry_point(args, unknown_args):
         "aws_security_group_id": args.aws_security_group_id,
         "aws_key_name": args.aws_key_name,
         "aws_subnet_id": args.aws_subnet_id,
+        "spot": args.spot,
+        "spot_params": args.spot_params,
         "set_cmd": "set -x",
     }
     return main(params)

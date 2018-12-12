@@ -49,7 +49,8 @@ setup(name='ecsub',
           # -*- Extra requirements: -*-
           'awscli',
           'boto3',
-          'pytz'
+          'pytz',
+          'six'
       ],
       entry_points="""
       # -*- Entry points: -*-

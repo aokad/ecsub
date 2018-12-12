@@ -85,9 +85,31 @@ def get_ami_id():
     data=boto3.client("ssm").get_parameters(Names=["/aws/service/ecs/optimized-ami/amazon-linux/recommended/image_id"])
     return data['Parameters'][0]['Value']
 
+def region_to_location(region):
+    location = {
+        "us-east-1": "US East (N. Virginia)",           # 米国東部（バージニア北部）
+        "us-east-2": "US East (Ohio)",                  # 米国東部 (オハイオ)
+        "us-west-1": "US West (N. California)",         # 米国西部 (北カリフォルニア)
+        "us-west-2": "US West (Oregon)",                # 米国西部 (オレゴン)
+        "ca-central-1": "Canada (Central)",             # カナダ (中部)
+        "eu-central-1": "EU (Frankfurt)",               # 欧州 (フランクフルト)
+        "eu-west-1": "EU (Ireland)",                    # 欧州 (アイルランド)
+        "eu-west-2": "EU (London)",                     # 欧州 (ロンドン)
+        "eu-west-3": "EU (Paris)",                      # EU (パリ)
+        "ap-northeast-1": "Asia Pacific (Tokyo)",       # アジアパシフィック (東京)
+        "ap-northeast-2": "Asia Pacific (Seoul)",       # アジアパシフィック (ソウル)
+        "ap-northeast-3": "Asia Pacific (Osaka-Local)", # アジアパシフィック (大阪: ローカル)
+        "ap-southeast-1": "Asia Pacific (Singapore)",   # アジアパシフィック (シンガポール)
+        "ap-southeast-2": "Asia Pacific (Sydney)",      # アジアパシフィック (シドニー)
+        "ap-south-1": "Asia Pacific (Mumbai)",          # アジアパシフィック (ムンバイ)
+        "sa-east-1": "South America (Sao Paulo)",       # 南米 (サンパウロ)
+    }
+    if region in location:
+        return location[region]
+    return None
+    
 def main():
     pass
     
 if __name__ == "__main__":
     main()
-

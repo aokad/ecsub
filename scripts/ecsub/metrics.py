@@ -89,7 +89,7 @@ def _download_metrics(params):
     if not os.path.exists(prefix):
         os.makedirs(prefix)
 
-    f = open("%s/%s-%s.txt" % (prefix, params['instanceName'], params['metric']), "w")
+    f = open("%s/%s-%s.txt" % (prefix, params['instanceName'].split(".")[-1], params['metric']), "w")
     start_date = None
 
     for date in sorted(_responce_to_dict(metric_range).keys()):
