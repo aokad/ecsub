@@ -6,6 +6,7 @@ Created on Tue Mar 27 10:41:12 2018
 """
 
 import ecsub.ansi
+import datetime
 
 def get_title_color (no):
         
@@ -13,10 +14,12 @@ def get_title_color (no):
         
 def message (title, no, messages):
         
-    text = "[%s]" % (title)
+    text = "%s " % (str(datetime.datetime.now()))
     if no != None:     
-        text = ecsub.ansi.colors.paint("[%s:%03d]" % (title, no), get_title_color(no))
-
+        text += ecsub.ansi.colors.paint("[%s:%03d]" % (title, no), get_title_color(no))
+    else:
+        text += "[%s]" % (title)
+        
     for m in messages:
         if "color" in m.keys():
             text += ecsub.ansi.colors.paint(m["text"], m["color"])

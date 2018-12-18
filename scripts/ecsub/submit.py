@@ -139,63 +139,162 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
     
     return True
 
-def submit_task_ondemand(aws_instance, no, shared_code):
-    
-    if aws_instance.run_instances_ondemand (no):
-        (instance_id, exit_code, stop) = aws_instance.run_task(no)
-        if instance_id != None:
-            aws_instance.terminate_instances(instance_id, no)
-            return exit_code
-        
-    return 1
+def submit_task_ondemand(aws_instance, no):
 
-def submit_task_spot(aws_instance, no, shared_code):
+    if aws_instance.set_ondemand_price():
+        if aws_instance.run_instances_ondemand (no):
+            (instance_id, exit_code, stop) = aws_instance.run_task(no)
+            if instance_id != None:
+                aws_instance.terminate_instances(instance_id, no)
+                return (exit_code, instance_id)
+        
+    return (1, None)
+
+def submit_task_spot(aws_instance, no):
     
     retry = False
     exit_code = 1
-    if aws_instance.run_instances_spot (no):
-        (instance_id, exit_code, stop) = aws_instance.run_task(no)
-        print (instance_id, exit_code, stop)
-        if stop:
-            retry = True
-            
-        if instance_id != None:
-            aws_instance.terminate_instances(instance_id, no)
-            aws_instance.cancel_spot_instance_requests (no = no, instance_id = instance_id)
-            shared_code[no] = exit_code
+    instance_id = None
+    print (aws_instance.aws_ec2_instance_type_list)
+    for itype in aws_instance.aws_ec2_instance_type_list:
+        print (itype)
+        aws_instance.aws_ec2_instance_type = itype
+        if not aws_instance.set_ondemand_price():
+            continue
+        if not aws_instance.set_spot_price():
+            continue
+                
+        if aws_instance.run_instances_spot (no):
+            (instance_id, exit_code, stop) = aws_instance.run_task(no)
+            if stop:
+                retry = True
+                
+            if instance_id != None:
+                aws_instance.terminate_instances(instance_id, no)
+                aws_instance.cancel_spot_instance_requests (no = no, instance_id = instance_id)
+                if exit_code == 0:
+                    break
     else:
         retry = True
-        
-    return (exit_code, retry)
-               
+    
+    if aws_instance.retry_od == False:
+        retry = False
+    return (exit_code, instance_id, retry)
+
+def _hour_delta(start_t, end_t):
+    return (end_t - start_t).total_seconds()/3600.0
+
 def submit_task(aws_instance, no, shared_code, spot):
+    
+    import json
+    import copy
     
     timer = {
         "ondemand": {"start": None, "end": None},
         "spot":     {"start": None, "end": None}
     }
     
-    if spot:
-        timer["spot"]["start"] = datetime.datetime.now()
-        (exit_code, retry) = submit_task_spot(aws_instance, no, shared_code)
-        timer["spot"]["end"] = datetime.datetime.now()
-        print (exit_code, retry)
-        if retry:
-            timer["ondemand"]["start"] = datetime.datetime.now()
-            (exit_code, retry) = submit_task_ondemand(aws_instance, no, shared_code)
-            timer["ondemand"]["end"] = datetime.datetime.now()
-    else:
-        timer["ondemand"]["start"] = datetime.datetime.now()
-        exit_code = submit_task_ondemand(aws_instance, no, shared_code)
-        timer["ondemand"]["end"] = datetime.datetime.now()
+    job_summary = {
+        "AccountId": aws_instance.aws_accountid,
+        "AmiId": aws_instance.aws_ami_id,
+        "ClusterName": aws_instance.cluster_name,
+        "ClusterArn": aws_instance.cluster_arn,
+        "Ec2InstanceDiskSize": aws_instance.aws_ec2_instance_disk_size,
+        "Ec2instancetype": aws_instance.aws_ec2_instance_type,
+        "EcsTaskMemory": aws_instance.aws_ecs_task_memory,
+        "EcsTaskVcpu": aws_instance.aws_ecs_task_vcpu,
+        "End": None,
+        "Image": aws_instance.image,
+        "KeyName": aws_instance.aws_key_name,
+        "LogGroupName": aws_instance.log_group_name,
+        "No": no,
+        "OdPrice": aws_instance.od_price,
+        "Region": aws_instance.aws_region,
+        "S3RunSh": aws_instance.s3_runsh,
+        "S3Script": aws_instance.s3_script,
+        "S3Setenv": aws_instance.s3_setenv,
+        "SecurityGroupId": aws_instance.aws_security_group_id,
+        "Shell": aws_instance.shell,
+        "Spot": aws_instance.spot,
+        "SpotAz": aws_instance.spot_az,
+        "SpotPrice": aws_instance.spot_price,
+        "Start": str(datetime.datetime.now()),
+        "SubnetId": aws_instance.aws_subnet_id,
+        "TaskDefinitionAn": aws_instance.task_definition_arn,
+        "UseAmazonEcr": aws_instance.use_amazon_ecr,
+        "Wdir": aws_instance.wdir,
+        "Jobs":[]
+    }
     
+    job_template = {
+        "Start": None,
+        "End": None,
+        "WorkHours": 0.0,
+        "Spot": False,
+        "InstanceId": "",
+        "ExitCode": 0
+    }
+        
+    if spot:
+        job = copy.deepcopy(job_template)
+        start_t = datetime.datetime.now()
+        job["Start"] = str(start_t)
+        timer["spot"]["start"] = start_t
+             
+        (exit_code, instance_id, retry) = submit_task_spot(aws_instance, no)
+        
+        end_t = datetime.datetime.now()
+        job["End"] = str(end_t)
+        job["Spot"] = True
+        job["ExitCode"] = exit_code
+        job["InstanceId"] = instance_id
+        job["WorkHours"] = _hour_delta(start_t, end_t)   
+        timer["spot"]["end"] = end_t
+        job_summary["Jobs"].append(job)
+        
+        if retry:
+            job = copy.deepcopy(job_template)
+            start_t = datetime.datetime.now()
+            job["Start"] = str(start_t)
+            timer["ondemand"]["start"] = start_t
+            
+            (exit_code, instance_id) = submit_task_ondemand(aws_instance, no)
+            
+            end_t = datetime.datetime.now()
+            job["End"] = str(end_t)
+            job["ExitCode"] = exit_code
+            job["InstanceId"] = instance_id
+            job["WorkHours"] = _hour_delta(start_t, end_t)
+            timer["ondemand"]["end"] = end_t
+            job_summary["Jobs"].append(job)
+    else:
+        job = copy.deepcopy(job_template)
+        start_t = datetime.datetime.now()
+        job["Start"] = str(start_t)
+        timer["ondemand"]["start"] = start_t
+        
+        (exit_code, instance_id) = submit_task_ondemand(aws_instance, no)
+        
+        end_t = datetime.datetime.now()
+        job["End"] = str(end_t)
+        job["ExitCode"] = exit_code
+        job["InstanceId"] = instance_id
+        job["WorkHours"] = _hour_delta(start_t, end_t)
+        timer["ondemand"]["end"] = end_t
+        job_summary["Jobs"].append(job)
+    
+    job_summary["End"] = str(datetime.datetime.now())
+    job_summary["SubnetId"] = aws_instance.aws_subnet_id
+    job_summary["SpotPrice"] = aws_instance.spot_price
+    job_summary["SpotAz"] = aws_instance.spot_az
+        
     ondemand_time = 0
-    if timer["ondemand"] != None:
-        ondemand_time = (timer["ondemand"]["end"] - timer["ondemand"]["start"]).total_seconds()/3600.0
+    if timer["ondemand"]["start"] != None:
+        ondemand_time = _hour_delta(timer["ondemand"]["start"], timer["ondemand"]["end"])
     
     spot_time = 0
-    if timer["spot"] != None:
-        spot_time = (timer["spot"]["end"] - timer["spot"]["start"]).total_seconds()/3600.0
+    if timer["spot"]["start"] != None:
+        spot_time = _hour_delta(timer["spot"]["start"], timer["spot"]["end"])
     
     if spot:                    
         print (ecsub.tools.info_message (aws_instance.cluster_name, no, 
@@ -210,29 +309,59 @@ def submit_task(aws_instance, no, shared_code, spot):
                 ondemand_time * aws_instance.od_price,
                 aws_instance.od_price, ondemand_time)
         ))
+    
+    log_file = "%s/log/summary.%03d.log" % (aws_instance.wdir, no) 
+    json.dump(job_summary, open(log_file, "w"), indent=4, separators=(',', ': '), sort_keys=True)
     shared_code[no] = exit_code
+    
+def job_memory (itype_list, param_memory):
+    dmemory = 0
+    for itype in itype_list:
+        if ecsub.aws_config.INSTANCE_TYPE[itype]["d.memory"] > dmemory:
+            dmemory = ecsub.aws_config.INSTANCE_TYPE[itype]["d.memory"]
+    return param_memory * 1000 - dmemory
     
 def main(params):
     
     # check instance type and set memory, vpu
-    undefined = False
-    if params["aws_ec2_instance_type"] in ecsub.aws_config.INSTANCE_TYPE:
-        if params["aws_ecs_task_memory"] == 0:
-            params["aws_ecs_task_memory"] = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["memory"]
-        if params["aws_ecs_task_vcpu"] == 0:
-            params["aws_ecs_task_vcpu"] = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["vcpu"]
-    else:
-        print (ecsub.tools.info_message (params["task_name"], None, "instance-type %s is not defined in ecsub." % (params["aws_ec2_instance_type"])))
+    if params["aws_ec2_instance_type"] != "":
+        if params["aws_ec2_instance_type"] in ecsub.aws_config.INSTANCE_TYPE:
+            if params["aws_ecs_task_memory"] == 0:
+                params["aws_ecs_task_memory"] = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["memory"]
+            else:
+                params["aws_ecs_task_memory"] = job_memory ([params["aws_ec2_instance_type"]], params["aws_ecs_task_memory"])
+                      
+            if params["aws_ecs_task_vcpu"] == 0:
+                params["aws_ecs_task_vcpu"] = ecsub.aws_config.INSTANCE_TYPE[params["aws_ec2_instance_type"]]["vcpu"]
+        else:
+            print (ecsub.tools.error_message (params["task_name"], None, "instance-type %s is not defined in ecsub." % (params["aws_ec2_instance_type"])))
+            return 1
+            
+    elif len(params["aws_ec2_instance_type_list"]) > 0:
+        if not params["spot"]:
+            print (ecsub.tools.error_message (params["task_name"], None, "--aws-ec2-instance-type-list option is not support with ondemand-instance mode."))
+            return 1
+        
+        for itype in params["aws_ec2_instance_type"]:
+            if not itype in ecsub.aws_config.INSTANCE_TYPE:
+                print (ecsub.tools.error_message (params["task_name"], None, "instance-type %s is not defined in ecsub." % (params["aws_ec2_instance_type"])))
+                return 1
+        
         if params["aws_ecs_task_memory"] == 0:
             print (ecsub.tools.error_message (params["task_name"], None, "--memory option is required."))
-            undefined = True
+            return 1
 
         if params["aws_ecs_task_vcpu"] == 0:
             print (ecsub.tools.error_message (params["task_name"], None, "--vcpu option is required."))
-            undefined = True
-            
-    if undefined:
+            return 1
+        
+        params["aws_ecs_task_memory"] = job_memory (params["aws_ec2_instance_type_list"], params["aws_ecs_task_memory"])
+        print(params["aws_ecs_task_memory"])     
+    else:
+        print (ecsub.tools.error_message (params["task_name"], None, "One of --aws-ec2-instance-type option and --aws-ec2-instance-type-list option is required."))
         return 1
+    
+
     
     # read tasks file
     params["cluster_name"] = params["task_name"]
@@ -268,9 +397,9 @@ def main(params):
     if not aws_instance.check_awsconfigure():
         return 1
     
-    if params["spot"] == True:
-        if not aws_instance.set_spot_price():
-            return 1
+    #if params["spot"] == True and params["aws_ec2_instance_type"] != "":
+    #    if not aws_instance.set_spot_price():
+    #        return 1
         
     if aws_instance.check_inputfiles(task_params):
 
@@ -331,6 +460,7 @@ def entry_point(args, unknown_args):
         "tasks": args.tasks,
         "task_name": args.task_name,
         "aws_ec2_instance_type": args.aws_ec2_instance_type,
+        "aws_ec2_instance_type_list": args.aws_ec2_instance_type_list.replace(" ", "").split(","),
         "aws_ec2_instance_disk_size": args.disk_size,
         "aws_ecs_task_memory": args.memory,
         "aws_ecs_task_vcpu": args.vcpu,
@@ -339,7 +469,7 @@ def entry_point(args, unknown_args):
         "aws_key_name": args.aws_key_name,
         "aws_subnet_id": args.aws_subnet_id,
         "spot": args.spot,
-        "spot_params": args.spot_params,
+        "retry_od": args.retry_od,
         "set_cmd": "set -x",
     }
     return main(params)

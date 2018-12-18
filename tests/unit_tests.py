@@ -6,7 +6,6 @@ Created on Tue Jun 28 13:18:34 2016
 
 """
 
-
 import unittest
 import os
 import glob
@@ -15,11 +14,12 @@ import subprocess
 class TestSet(unittest.TestCase):
 
     WDIR = "/tmp/ecsub"
+    before = []
     
     # init class
     @classmethod
     def setUpClass(cls):
-        pass
+        cls.before = glob.glob(cls.WDIR + "/*")
         
     # terminated class
     @classmethod
@@ -72,38 +72,22 @@ class TestSet(unittest.TestCase):
 
     def test4_01_logs(self):
         
-        # submit job
-        before = glob.glob(self.WDIR + "/*")
-        options = [
-            "--wdir", self.WDIR,
-            "--image", "python:2-alpine3.6",
-            "--shell", "ash",
-            "--script", "./examples/run-wordcount.sh",
-            "--tasks", "./tests/test-wordcount.tsv",
-            "--aws-ec2-instance-type", "t2.micro",
-            "--disk-size", "1",
-            "--aws-s3-bucket", "s3://travisci-work/wordcount/output/",
-        ]
-        subprocess.check_call(['python', 'ecsub', 'submit'] + options)
-
         after = glob.glob(self.WDIR + "/*")
         
-        for b in before:
+        for b in self.before:
             if b in after:
                 after.remove(b)
         
-        if len(after) != 1:
-            raise ValueError
-        
-        cluster_name = os.path.basename(after[0])
-        
-        # download and remove
-        options = [
-            "--wdir", self.WDIR,
-            "--prefix", cluster_name,
-            "--rm", "--dw"
-        ]
-        subprocess.check_call(['python', 'ecsub', 'logs'] + options)
+        for dir_name in after:
+            cluster_name = os.path.basename(dir_name)
+            
+            # download and remove
+            options = [
+                "--wdir", self.WDIR,
+                "--prefix", cluster_name,
+                "--rm", "--dw"
+            ]
+            subprocess.check_call(['python', 'ecsub', 'logs'] + options)
         
 def suite():
     suite = unittest.TestSuite()
