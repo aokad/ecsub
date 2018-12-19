@@ -541,7 +541,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         
         return self._wait_run_instance(instance_id, no)
     
-    def set_ondemand_price (self):
+    def set_ondemand_price (self, no = None):
         response = boto3.client('pricing', region_name = "ap-south-1").get_products(
             ServiceCode='AmazonEC2',
             Filters = [
@@ -564,19 +564,19 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                         values.append(obj["terms"]["OnDemand"][key1]["priceDimensions"][key2]["pricePerUnit"]["USD"])
         except Exception as e:
             print (e)
-            print(ecsub.tools.error_message (self.cluster_name, None, "instance-type %s can not be used in region '%s'." % (self.aws_ec2_instance_type, self.aws_region)))
+            print(ecsub.tools.error_message (self.cluster_name, no, "instance-type %s can not be used in region '%s'." % (self.aws_ec2_instance_type, self.aws_region)))
             return 0
         
         values.sort()
         if len(values) > 0:
-            print(ecsub.tools.info_message (self.cluster_name, None, "Instance Type: %s, Ondemand Price: %s USD" % (self.aws_ec2_instance_type, values[-1])))
+            print(ecsub.tools.info_message (self.cluster_name, no, "Instance Type: %s, Ondemand Price: %s USD" % (self.aws_ec2_instance_type, values[-1])))
             self.od_price = float(values[-1])
             return True
         
-        print(ecsub.tools.error_message (self.cluster_name, None, "instance-type %s can not be used in region '%s'." % (self.aws_ec2_instance_type, self.aws_region)))
+        print(ecsub.tools.error_message (self.cluster_name, no, "instance-type %s can not be used in region '%s'." % (self.aws_ec2_instance_type, self.aws_region)))
         return 0
     
-    def set_spot_price (self):
+    def set_spot_price (self, no = None):
         
         now = datetime.datetime.utcnow()
         start_dt = now - datetime.timedelta(days = 6)
@@ -607,16 +607,16 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                 price["az"] = key
 
         if price["price"] < 0:
-            print(ecsub.tools.error_message (self.cluster_name, None, "failure describe_spot_price_history."))
+            print(ecsub.tools.error_message (self.cluster_name, no, "failure describe_spot_price_history."))
             return False
         
         if price["price"] > self.od_price * 0.98:
-            print(ecsub.tools.error_message (self.cluster_name, None, "spot price %f is close to ondemand price %f." % (price["price"], self.od_price)))
+            print(ecsub.tools.error_message (self.cluster_name, no, "spot price %f is close to ondemand price %f." % (price["price"], self.od_price)))
             return False
         
         self.spot_price = price["price"]
         self.spot_az = price["az"]
-        print(ecsub.tools.info_message (self.cluster_name, None, "Spot Price: %s USD, Availality Zone: %s" % (price["price"], price["az"])))
+        print(ecsub.tools.info_message (self.cluster_name, no, "Spot Price: %s USD, Availality Zone: %s" % (price["price"], price["az"])))
         return True
     
     def _describe_spot_instances(self, no, request_id):
