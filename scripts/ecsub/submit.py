@@ -141,7 +141,7 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
 
 def submit_task_ondemand(aws_instance, no):
 
-    if aws_instance.set_ondemand_price():
+    if aws_instance.set_ondemand_price(no):
         if aws_instance.run_instances_ondemand (no):
             (instance_id, exit_code, stop) = aws_instance.run_task(no)
             if instance_id != None:
@@ -155,10 +155,9 @@ def submit_task_spot(aws_instance, no):
     retry = False
     exit_code = 1
     instance_id = None
-    #print (aws_instance.aws_ec2_instance_type_list)
+    
     for itype in aws_instance.aws_ec2_instance_type_list:
-        #print (itype)
-        aws_instance.aws_ec2_instance_type = itype
+        aws_instance.task_param[no]["aws_ec2_instance_type"] = itype
         if not aws_instance.set_ondemand_price(no):
             continue
         if not aws_instance.set_spot_price(no):
@@ -184,19 +183,17 @@ def submit_task_spot(aws_instance, no):
 def _hour_delta(start_t, end_t):
     return (end_t - start_t).total_seconds()/3600.0
     
-def _set_job_info(aws_instance, start_t, end_t, instance_id, exit_code, spot = False):
+def _set_job_info(task_param, start_t, end_t, instance_id, exit_code):
     return {
-        "Ec2instancetype": aws_instance.aws_ec2_instance_type,
-        "EcsTaskMemory": aws_instance.aws_ecs_task_memory,
-        "EcsTaskVcpu": aws_instance.aws_ecs_task_vcpu,
+        "Ec2instancetype": task_param["aws_ec2_instance_type"],
         "End": end_t,
         "ExitCode": exit_code,
         "InstanceId": instance_id,
-        "OdPrice": aws_instance.od_price,
+        "OdPrice": task_param["od_price"],
         "Start": start_t,
-        "Spot": spot,
-        "SpotAz": aws_instance.spot_az,
-        "SpotPrice": aws_instance.spot_price,
+        "Spot": task_param["spot"],
+        "SpotAz": task_param["spot_az"],
+        "SpotPrice": task_param["spot_price"],
         "WorkHours": _hour_delta(start_t, end_t),
     }
 
@@ -234,6 +231,8 @@ def submit_task(aws_instance, no, shared_code, spot):
         "ClusterName": aws_instance.cluster_name,
         "ClusterArn": aws_instance.cluster_arn,
         "Ec2InstanceDiskSize": aws_instance.aws_ec2_instance_disk_size,
+        "EcsTaskMemory": aws_instance.aws_ecs_task_memory,
+        "EcsTaskVcpu": aws_instance.aws_ecs_task_vcpu,
         "End": None,
         "Image": aws_instance.image,
         "KeyName": aws_instance.aws_key_name,
@@ -257,16 +256,17 @@ def submit_task(aws_instance, no, shared_code, spot):
     if spot:
         start_t = datetime.datetime.now()
         (exit_code, instance_id, retry) = submit_task_spot(aws_instance, no)
-        job_summary["Jobs"].append(_set_job_info(aws_instance, start_t, datetime.datetime.now(), instance_id, exit_code, True))
+        job_summary["Jobs"].append(_set_job_info(aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, exit_code))
         
         if retry:
-            start_t = datetime.datetime.now()            
+            start_t = datetime.datetime.now()
+            aws_instance.task_param[no]["aws_ec2_instance_type"] = aws_instance.aws_ec2_instance_type_list[0]
             (exit_code, instance_id) = submit_task_ondemand(aws_instance, no)
-            job_summary["Jobs"].append(_set_job_info(aws_instance, start_t, datetime.datetime.now(), instance_id, exit_code))
+            job_summary["Jobs"].append(_set_job_info(aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, exit_code))
     else:
         start_t = datetime.datetime.now()        
         (exit_code, instance_id) = submit_task_ondemand(aws_instance, no)
-        job_summary["Jobs"].append(_set_job_info(aws_instance, start_t, datetime.datetime.now(), instance_id, exit_code))
+        job_summary["Jobs"].append(_set_job_info(aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, exit_code))
     
     job_summary["End"] = str(datetime.datetime.now())
     job_summary["SubnetId"] = aws_instance.aws_subnet_id
@@ -365,7 +365,7 @@ def main(params):
     os.makedirs(params["wdir"] + "/conf")
     os.makedirs(params["wdir"] + "/script")
 
-    aws_instance = ecsub.aws.Aws_ecsub_control(params)
+    aws_instance = ecsub.aws.Aws_ecsub_control(params, len(task_params["tasks"]))
     
     # check task-param
     if not aws_instance.check_awsconfigure():

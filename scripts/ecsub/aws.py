@@ -18,7 +18,7 @@ import glob
 
 class Aws_ecsub_control:
 
-    def __init__(self, params):
+    def __init__(self, params, task_num):
         
         self.aws_accountid = self._get_aws_account_id()
         self.aws_region = self._get_region()
@@ -34,10 +34,10 @@ class Aws_ecsub_control:
         self.log_group_name = "ecsub-" + self.cluster_name
         
         self.aws_ami_id = ecsub.aws_config.get_ami_id()
-        self.aws_ec2_instance_type = params["aws_ec2_instance_type"]
+        #self.aws_ec2_instance_type = params["aws_ec2_instance_type"]
         self.aws_ec2_instance_type_list = params["aws_ec2_instance_type_list"]
         if self.aws_ec2_instance_type_list == ['']:
-            self.aws_ec2_instance_type_list = [self.aws_ec2_instance_type]
+            self.aws_ec2_instance_type_list = [params["aws_ec2_instance_type"]]
         
         self.aws_ecs_task_vcpu = params["aws_ecs_task_vcpu"]
         self.aws_ecs_task_memory = params["aws_ecs_task_memory"]
@@ -55,11 +55,21 @@ class Aws_ecsub_control:
         self.s3_setenv = []
         
         self.spot = params["spot"]
-        self.spot_az = ""
+        #self.spot_az = ""
         self.retry_od = params["retry_od"]
-        self.spot_price = 0
-        self.od_price = 0
+        #self.spot_price = 0
+        #self.od_price = 0
         
+        self.task_param = []
+        for i in range(task_num):
+            self.task_param.append({
+                "spot": params["spot"],
+                "aws_ec2_instance_type": params["aws_ec2_instance_type"],
+                "od_price": 0,
+                "spot_az": "",
+                "spot_price": 0,
+            })
+    
     def _subprocess_communicate (self, cmd):
         responce = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).communicate()[0]
         if type(responce) == type(b''):
@@ -94,10 +104,6 @@ class Aws_ecsub_control:
         if ecsub.aws_config.region_to_location(self.aws_region) == None:
             print(ecsub.tools.error_message (self.cluster_name, None, "region '%s' can not be used in ecsub." % (self.aws_region)))
             return False
-        
-        #if self.od_price == 0:
-        #    print(ecsub.tools.error_message (self.cluster_name, None, "instance-type %s can not be used in region '%s'." % (self.aws_ec2_instance_type, self.aws_region)))
-        #    return False
         
         return True
     
@@ -185,13 +191,15 @@ class Aws_ecsub_control:
         self.s3_setenv.extend(s3_setenv)
 
     def _log_path (self, name):
-        log_path = "%s/log/%s.log" % (self.wdir, name)
-        i = 1
+        
+        i = 0
+        log_path = ""
         while True:
-            if not os.path.exists(log_path):
-                break
             log_path = "%s/log/%s.%d.log" % (self.wdir, name, i)
             i += 1
+            if not os.path.exists(log_path):
+                break
+
         return log_path
 
     def _conf_path (self, name):
@@ -529,7 +537,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             SECURITYGROUPID = self.aws_security_group_id,
             KEY_NAME = self.aws_key_name,
             subnet_id = subnet_id,
-            instance_type = self.aws_ec2_instance_type,
+            instance_type = self.task_param[no]["aws_ec2_instance_type"],
             json = bd_mappings_file,
             INDEX = no,
             userdata = userdata_file,
@@ -541,11 +549,14 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         
         return self._wait_run_instance(instance_id, no)
     
-    def set_ondemand_price (self, no = None):
+    def set_ondemand_price (self, no):
+        
+        self.task_param[no]["spot"] = False
+                       
         response = boto3.client('pricing', region_name = "ap-south-1").get_products(
             ServiceCode='AmazonEC2',
             Filters = [
-                {'Type' :'TERM_MATCH', 'Field':'instanceType',    'Value': self.aws_ec2_instance_type},
+                {'Type' :'TERM_MATCH', 'Field':'instanceType',    'Value': self.task_param[no]["aws_ec2_instance_type"]},
                 {'Type' :'TERM_MATCH', 'Field':'location',        'Value': ecsub.aws_config.region_to_location(self.aws_region)},
                 {'Type' :'TERM_MATCH', 'Field':'operatingSystem', 'Value': 'Linux'},
                 {'Type' :'TERM_MATCH', 'Field':'tenancy',         'Value': 'Shared'},
@@ -564,25 +575,25 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                         values.append(obj["terms"]["OnDemand"][key1]["priceDimensions"][key2]["pricePerUnit"]["USD"])
         except Exception as e:
             print (e)
-            print(ecsub.tools.error_message (self.cluster_name, no, "instance-type %s can not be used in region '%s'." % (self.aws_ec2_instance_type, self.aws_region)))
+            print(ecsub.tools.error_message (self.cluster_name, no, "instance-type %s can not be used in region '%s'." % (self.task_param[no]["aws_ec2_instance_type"], self.aws_region)))
             return 0
         
         values.sort()
         if len(values) > 0:
-            print(ecsub.tools.info_message (self.cluster_name, no, "Instance Type: %s, Ondemand Price: %s USD" % (self.aws_ec2_instance_type, values[-1])))
-            self.od_price = float(values[-1])
+            print(ecsub.tools.info_message (self.cluster_name, no, "Instance Type: %s, Ondemand Price: %s USD" % (self.task_param[no]["aws_ec2_instance_type"], values[-1])))
+            self.task_param[no]["od_price"] = float(values[-1])
             return True
         
-        print(ecsub.tools.error_message (self.cluster_name, no, "instance-type %s can not be used in region '%s'." % (self.aws_ec2_instance_type, self.aws_region)))
+        print(ecsub.tools.error_message (self.cluster_name, no, "instance-type %s can not be used in region '%s'." % (self.task_param[no]["aws_ec2_instance_type"], self.aws_region)))
         return 0
     
-    def set_spot_price (self, no = None):
+    def set_spot_price (self, no):
         
         now = datetime.datetime.utcnow()
         start_dt = now - datetime.timedelta(days = 6)
         response = boto3.client('ec2').describe_spot_price_history(
             Filters = [{"Name":'product-description', "Values": ['Linux/UNIX']}],
-            InstanceTypes = [self.aws_ec2_instance_type],
+            InstanceTypes = [self.task_param[no]["aws_ec2_instance_type"]],
             MaxResults = 100,
             StartTime = start_dt,
             EndTime = now,
@@ -610,53 +621,42 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             print(ecsub.tools.error_message (self.cluster_name, no, "failure describe_spot_price_history."))
             return False
         
-        if price["price"] > self.od_price * 0.98:
-            print(ecsub.tools.error_message (self.cluster_name, no, "spot price %f is close to ondemand price %f." % (price["price"], self.od_price)))
+        if price["price"] > self.task_param[no]["od_price"] * 0.98:
+            print(ecsub.tools.error_message (self.cluster_name, no, "spot price %f is close to ondemand price %f." % (price["price"], self.task_param[no]["od_price"])))
             return False
         
-        self.spot_price = price["price"]
-        self.spot_az = price["az"]
+        self.task_param[no]["spot_price"] = price["price"]
+        self.task_param[no]["spot_az"] = price["az"]
         print(ecsub.tools.info_message (self.cluster_name, no, "Spot Price: %s USD, Availality Zone: %s" % (price["price"], price["az"])))
         return True
     
-    def _describe_spot_instances(self, no, request_id):
-        
-        cmd2_template = "{set_cmd}; aws ec2 describe-spot-instance-requests --spot-instance-request-ids {REQUEST_ID} > {log}"
-        
-        instance_id = ""
-        retry = False
-        
-        try:
-            log_file = self._log_path("describe-spot-instance-requests.%d" % (no))
-            cmd2 = cmd2_template.format(
-                set_cmd = self.set_cmd,
-                REQUEST_ID = request_id,
-                log = log_file
+    def _describe_spot_instances(self, no, request_id = None, instance_id = None):
+
+        responce = None
+        if request_id != None:
+            responce = boto3.client("ec2").describe_spot_instance_requests(
+                SpotInstanceRequestIds=[
+                    request_id,
+                ]
             )
-            self._subprocess_call(cmd2, no)
-            responce = self._json_load(log_file)
-            
-            if responce['SpotInstanceRequests'][0]['State'] == "active":
-                if responce['SpotInstanceRequests'][0]['Status']['Code'] == 'fulfilled':
-                    instance_id = responce['SpotInstanceRequests'][0]['InstanceId']
-            
-            elif responce['SpotInstanceRequests'][0]['State'] == "open":
-                if responce['SpotInstanceRequests'][0]['Status']['Code'] == 'pending-evaluation':
-                    retry = True
-            
-            if instance_id == "":
-                print(ecsub.tools.error_message (self.cluster_name, no, "Failure request-spot-instances. [Status] %s [Code] %s [Message] %s" % 
-                    (responce['SpotInstanceRequests'][0]['State'],
-                     responce['SpotInstanceRequests'][0]['Status']['Code'],
-                     responce['SpotInstanceRequests'][0]['Status']['Message'])
-                ))
-            
-        except Exception as e:
-            print (e)
+        elif instance_id != None:
+            responce = boto3.client("ec2").describe_spot_instance_requests(
+                Filters = [
+                    {"Name":"instance-id", "Values": [instance_id]}
+                ]
+            )
+        else:
+            return None
         
-        return [instance_id, retry]
-            
+        if not 'SpotInstanceRequests' in responce:
+            return None
+        
+        #json.dump(responce, open(self._log_path("describe-spot-instance-requests.%03d" % no), "w"), indent=4, separators=(',', ': '))
+        return responce['SpotInstanceRequests'][0]
+    
     def run_instances_spot (self, no):
+        
+        self.task_param[no]["spot"] = True
         
         userdata_text = ecsub.tools.base64_encode(self._userdata())
         block_device_mappings = self._getblock_device_mappings()
@@ -668,10 +668,10 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                 "Name": "ecsInstanceRole"
             },
             "ImageId": self.aws_ami_id,
-            "InstanceType": self.aws_ec2_instance_type,
+            "InstanceType": self.task_param[no]["aws_ec2_instance_type"],
             "KeyName": self.aws_key_name,
             "Placement": {
-                "AvailabilityZone": self.spot_az,
+                "AvailabilityZone": self.task_param[no]["spot_az"],
             },
             "UserData": userdata_text.decode()
         }
@@ -684,22 +684,15 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         
         log_file = self._log_path("request-spot-instances.%03d" % (no))
         
-        spot_price = ""
-        #if self.spot_price > 0:
-        #    spot_price = " --spot-price {spot_price}".format(spot_price = spot_price)
-           
         cmd_template = "{set_cmd};" \
             + "aws ec2 request-spot-instances" \
-            + "{spot_price}" \
             + " --instance-count 1" \
             + " --type 'one-time'" \
             + " --launch-specification file://{specification_file}" \
-            + " > {log}" \
-            + "; sleep 10"
+            + " > {log}; sleep 10"
         
         cmd = cmd_template.format(
             set_cmd = self.set_cmd,
-            spot_price = spot_price,
             specification_file = specification_file,
             log = log_file
         )
@@ -714,18 +707,31 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             return False
         
         for i in range(3):
-            [instance_id, retry] = self._describe_spot_instances(no, request_id)
-            if instance_id != "":
-                return self._wait_run_instance(instance_id, no)
+            responce = self._describe_spot_instances(no, request_id = request_id)
             
-            if retry:
-                cmd_template = "{set_cmd}; aws ec2 wait spot-instance-request-fulfilled --spot-instance-request-ids {REQUEST_ID}"
-                cmd = cmd_template.format(
-                    set_cmd = self.set_cmd,
-                    REQUEST_ID = request_id
-                )
-                self._subprocess_call(cmd, no)
-            else:
+            try:
+                state = responce['State']
+                status_code = responce['Status']['Code']
+                
+                if state == "active" and status_code == 'fulfilled':
+                    instance_id = responce['InstanceId']
+                    return self._wait_run_instance(instance_id, no)
+                
+                elif state == "open" and status_code == 'pending-evaluation':
+                    cmd_template = "{set_cmd}; aws ec2 wait spot-instance-request-fulfilled --spot-instance-request-ids {REQUEST_ID}"
+                    cmd = cmd_template.format(
+                        set_cmd = self.set_cmd,
+                        REQUEST_ID = request_id
+                    )
+                    self._subprocess_call(cmd, no)
+                else:
+                    print(ecsub.tools.error_message (self.cluster_name, no, "Failure request-spot-instances. [Status] %s [Code] %s [Message] %s" % 
+                        (responce['State'],
+                         responce['Status']['Code'],
+                         responce['Status']['Message'])
+                    ))
+                    break
+            except Exception:
                 break
             
         self.cancel_spot_instance_requests (no = no, spot_req_id = request_id)
@@ -892,7 +898,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         log_file = self._log_path("describe-tasks.%03d" % (no))
 
         responce["tasks"][0]["log"] = log_html
-        responce["tasks"][0]["instance_type"] = self.aws_ec2_instance_type
+        responce["tasks"][0]["instance_type"] = self.task_param[no]["aws_ec2_instance_type"]
         responce["tasks"][0]["disk_size"] = self.aws_ec2_instance_disk_size
         responce["tasks"][0]["no"] = no
         responce["tasks"][0]["log_local"] = log_file
@@ -918,28 +924,46 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             if exit_code != 0:
                 print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (responce["tasks"][0]["stoppedReason"])))
 
-        cancel = False
-        if exit_code != 0 and self.spot:
-            cancel = True
-            
-        return [ec2InstanceId, exit_code, cancel]
+        # check spot insatance was canceled?
+        interrupt = True
+        if self.task_param[no]["spot"] == False:
+            interrupt = False
+        else:
+            if exit_code == 0:
+                interrupt = False
+            else:
+                responce = self._describe_spot_instances(no, request_id = ec2InstanceId)
+                if responce == None:
+                    interrupt = False
+                else:
+                    state = responce['State']
+                    status_code = responce['Status']['Code']
+                    
+                    valid_until = responce['ValidUntil']
+                    until_t = datetime.datetime.strptime(valid_until, '%Y-%m-%dT%H:%M:%S.%fZ')
+                    now_t = datetime.datetime.utcnow()
+                    cancel_message = "Spot instance was cancelled. [Status] %s [Code] %s [Message] %s" % (
+                            responce['State'],
+                            responce['Status']['Code'],
+                            responce['Status']['Message'])
+                    
+                    # spot-instance is running -> task mistake
+                    if state == "active" and status_code == 'fulfilled':
+                        interrupt = False
+                    else:
+                        print(ecsub.tools.error_message (self.cluster_name, no, cancel_message))
+                    
+                        # cancelled by user
+                        if state == "cancelled" and status_code == 'instance-terminated-by-user':
+                            interrupt = False
+                        # spot instance time-out -> long long task
+                        elif now_t > until_t:
+                            interrupt = False
+                        else:
+                            interrupt = True
+                        
+        return [ec2InstanceId, exit_code, interrupt]
 
-    def _instance_id_to_spotrequest (self, instance_id):
-        responce = boto3.client("ec2").describe_spot_instance_requests(
-            Filters = [
-                {"Name":"instance-id", "Values": [instance_id]}
-            ]
-        )
-        
-        if not 'SpotInstanceRequests' in responce:
-            return None
-        
-        state = responce['SpotInstanceRequests'][0]['State']
-        if state == "active" or state == "open":
-            return responce['SpotInstanceRequests'][0]['SpotInstanceRequestId']
-        
-        return None
-    
     def terminate_instances (self, instance_id, no = None):
 
         log_file = self._log_path("terminate-instances")
@@ -963,9 +987,13 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         if no != None:
             log_file = self._log_path("cancel-spot-instance-requests.%03d" % (no))
     
-        if spot_req_id == None:        
-            spot_req_id = self._instance_id_to_spotrequest (instance_id)
-        
+        if spot_req_id == None:
+            responce = self._describe_spot_instances (instance_id = instance_id)
+            if responce != None:
+                state = responce['State']
+                if state == "active" or state == "open":
+                    spot_req_id = responce['SpotInstanceRequestId']
+
         if spot_req_id != None:
             cmd_template = "{set_cmd};" \
                 + "aws ec2 cancel-spot-instance-requests --spot-instance-request-ids {spot_req_id} > {log}"

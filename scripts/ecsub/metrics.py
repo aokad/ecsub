@@ -148,7 +148,7 @@ def entry_point(wdir):
     import json
     import glob
     
-    cluster = json.load(open("%s/log/create-cluster.log" % (wdir)))["cluster"]
+    cluster = json.load(open("%s/log/create-cluster.0.log" % (wdir)))["cluster"]
     instance_list = []
     for tag_file in sorted(glob.glob("%s/log/create-tags*.log" % (wdir))):
         instance = json.load(open(tag_file))
