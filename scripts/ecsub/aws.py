@@ -996,7 +996,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             log_file = self._log_path("cancel-spot-instance-requests.%03d" % (no))
     
         if spot_req_id == None:
-            response = self._describe_spot_instances (instance_id = instance_id)
+            response = self._describe_spot_instances (no, instance_id = instance_id)
             if response != None:
                 state = response['State']
                 if state == "active" or state == "open":
