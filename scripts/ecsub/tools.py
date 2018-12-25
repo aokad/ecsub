@@ -9,11 +9,9 @@ import ecsub.ansi
 import datetime
 
 def get_title_color (no):
-        
     return ecsub.ansi.colors.roll_list[no % len(ecsub.ansi.colors.roll_list)]
         
 def message (title, no, messages):
-        
     text = "%s " % (str(datetime.datetime.now()))
     if no != None:     
         text += ecsub.ansi.colors.paint("[%s:%03d]" % (title, no), get_title_color(no))
@@ -46,6 +44,12 @@ def base64_encode(text):
     import base64
     return base64.b64encode(text.encode('utf-8'))
 
+def datetime_to_isoformat(dt):
+    return dt.isoformat() + "Z"
+
+def isoformat_to_datetime(text):
+    return datetime.datetime.strptime(text, '%Y-%m-%dT%H:%M:%S.%fZ')
+    
 def main():
     pass
 

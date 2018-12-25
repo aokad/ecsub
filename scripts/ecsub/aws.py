@@ -71,10 +71,10 @@ class Aws_ecsub_control:
             })
     
     def _subprocess_communicate (self, cmd):
-        responce = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).communicate()[0]
-        if type(responce) == type(b''):
-            return responce.decode('ascii')
-        return responce
+        response = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).communicate()[0]
+        if type(response) == type(b''):
+            return response.decode('ascii')
+        return response
         
     def _subprocess_call (self, cmd, no = None):
         def __subprocess_call (cmd):
@@ -113,17 +113,17 @@ class Aws_ecsub_control:
             for i in range(len(task)):
                 if tasks["header"][i]["type"] != "input":
                     continue
-                #cmd_template = "{set_cmd}; aws s3 ls {path}"
+                
                 cmd_template = "aws s3 ls {path}"
                 cmd = cmd_template.format(set_cmd = self.set_cmd, path = task[i].rstrip("/"))
-                responce = self._subprocess_communicate(cmd)
+                response = self._subprocess_communicate(cmd)
 
-                if responce == "":
+                if response == "":
                     print(ecsub.tools.error_message (self.cluster_name, None, "s3-path '%s' is invalid." % (task[i])))
                     return False
 
                 find = False
-                for r in responce.split("\n"):
+                for r in response.split("\n"):
                     if r.split(" ")[-1].rstrip("/") == os.path.basename(task[i].rstrip("/")):
                         find = True
                         break
@@ -137,8 +137,8 @@ class Aws_ecsub_control:
         def _check_role(role_name, service, cluster_name):
             result = False
             try:
-                responce = boto3.client('iam').get_role(RoleName = role_name)
-                if responce["Role"]["AssumeRolePolicyDocument"]["Statement"][0]["Principal"]["Service"] == service:
+                response = boto3.client('iam').get_role(RoleName = role_name)
+                if response["Role"]["AssumeRolePolicyDocument"]["Statement"][0]["Principal"]["Service"] == service:
                     result = True
 
             except Exception as e:
@@ -149,8 +149,8 @@ class Aws_ecsub_control:
         def _check_policy(policy_arn, cluster_name):
             result = False
             try:
-                responce = boto3.client('iam').get_policy(PolicyArn = policy_arn)
-                if responce["Policy"]["IsAttachable"]:
+                response = boto3.client('iam').get_policy(PolicyArn = policy_arn)
+                if response["Policy"]["IsAttachable"]:
                     result = True
                     
             except Exception as e:
@@ -206,12 +206,12 @@ class Aws_ecsub_control:
         return "%s/conf/%s" % (self.wdir, name)
 
     def _get_aws_account_id(self):
-        responce = self._subprocess_communicate("aws sts get-caller-identity")
-        return json.loads(responce)["Account"]
+        response = self._subprocess_communicate("aws sts get-caller-identity")
+        return json.loads(response)["Account"]
 
     def _get_region(self):
-        responce = self._subprocess_communicate("aws configure get region")
-        return responce.rstrip("\n")
+        response = self._subprocess_communicate("aws configure get region")
+        return response.rstrip("\n")
 
     def _json_load(self, json_file):
         
@@ -227,8 +227,8 @@ class Aws_ecsub_control:
         
     def _check_keypair (self, aws_key_name):
         try:
-            responce = boto3.client('ec2').describe_key_pairs(KeyNames=[aws_key_name])
-            if len(responce["KeyPairs"]) > 0:
+            response = boto3.client('ec2').describe_key_pairs(KeyNames=[aws_key_name])
+            if len(response["KeyPairs"]) > 0:
                 return True
         except Exception as e:
             print(ecsub.tools.error_message (self.cluster_name, None, e))
@@ -261,17 +261,17 @@ class Aws_ecsub_control:
         
         if self.aws_security_group_id != "":
             try:
-                responce = boto3.client('ec2').describe_security_groups(GroupIds=[self.aws_security_group_id])
-                if len(responce['SecurityGroups']) > 0:
+                response = boto3.client('ec2').describe_security_groups(GroupIds=[self.aws_security_group_id])
+                if len(response['SecurityGroups']) > 0:
                     return True
             except Exception:
                 pass
             print(ecsub.tools.warning_message (self.cluster_name, None, "SecurityGroupId '%s' is invalid." % (self.aws_security_group_id)))
             
         try:
-            responce = boto3.client('ec2').describe_security_groups(GroupNames=["default"])
-            if len(responce['SecurityGroups']) > 0:
-                self.aws_security_group_id =responce['SecurityGroups'][0]['GroupId']
+            response = boto3.client('ec2').describe_security_groups(GroupNames=["default"])
+            if len(response['SecurityGroups']) > 0:
+                self.aws_security_group_id =response['SecurityGroups'][0]['GroupId']
                 return True
         except Exception:
             pass
@@ -378,9 +378,9 @@ class Aws_ecsub_control:
         # check exists ECS cluster
         cmd_template = "aws logs describe-log-groups --log-group-name-prefix {log_group_name} | grep logGroupName | grep \"{log_group_name}\" | wc -l"
         cmd = cmd_template.format(set_cmd = self.set_cmd, log_group_name = self.log_group_name)
-        responce = self._subprocess_communicate(cmd)
+        response = self._subprocess_communicate(cmd)
         
-        if int(responce) == 0:
+        if int(response) == 0:
             cmd_template = "{set_cmd}; aws logs create-log-group --log-group-name {log_group_name}"
             cmd = cmd_template.format(set_cmd = self.set_cmd, log_group_name = self.log_group_name)
             self._subprocess_call(cmd)
@@ -495,8 +495,8 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             self._subprocess_call(cmd, no)
     
             for i in range(3):
-                responce = boto3.client("ec2").describe_instance_status(InstanceIds=[instance_id])
-                if responce['InstanceStatuses'][0]['InstanceStatus']['Status'] == "ok":
+                response = boto3.client("ec2").describe_instance_status(InstanceIds=[instance_id])
+                if response['InstanceStatuses'][0]['InstanceStatus']['Status'] == "ok":
                     return True
                 self._subprocess_call(cmd, no)
     
@@ -632,15 +632,15 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
     
     def _describe_spot_instances(self, no, request_id = None, instance_id = None):
 
-        responce = None
+        response = None
         if request_id != None:
-            responce = boto3.client("ec2").describe_spot_instance_requests(
+            response = boto3.client("ec2").describe_spot_instance_requests(
                 SpotInstanceRequestIds=[
                     request_id,
                 ]
             )
         elif instance_id != None:
-            responce = boto3.client("ec2").describe_spot_instance_requests(
+            response = boto3.client("ec2").describe_spot_instance_requests(
                 Filters = [
                     {"Name":"instance-id", "Values": [instance_id]}
                 ]
@@ -648,11 +648,21 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         else:
             return None
         
-        if not 'SpotInstanceRequests' in responce:
+        if not 'SpotInstanceRequests' in response:
             return None
         
-        #json.dump(responce, open(self._log_path("describe-spot-instance-requests.%03d" % no), "w"), indent=4, separators=(',', ': '))
-        return responce['SpotInstanceRequests'][0]
+        #import pprint
+        #pprint.pprint(response)
+        import copy
+        response_cp = copy.deepcopy(response)
+        r0 = response['SpotInstanceRequests'][0]
+        r0_cp = response_cp['SpotInstanceRequests'][0]
+        r0_cp['CreateTime'] = ecsub.tools.datetime_to_isoformat(r0['CreateTime'])
+        r0_cp['Status']['UpdateTime'] = ecsub.tools.datetime_to_isoformat(r0['Status']['UpdateTime']) 
+        r0_cp['ValidUntil'] = ecsub.tools.datetime_to_isoformat(r0['ValidUntil']) 
+        json.dump(response_cp, open(self._log_path("describe-spot-instance-requests.%03d" % no), "w"), indent=4, separators=(',', ': '))
+        
+        return response['SpotInstanceRequests'][0]
     
     def run_instances_spot (self, no):
         
@@ -707,14 +717,14 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             return False
         
         for i in range(3):
-            responce = self._describe_spot_instances(no, request_id = request_id)
+            response = self._describe_spot_instances(no, request_id = request_id)
             
             try:
-                state = responce['State']
-                status_code = responce['Status']['Code']
+                state = response['State']
+                status_code = response['Status']['Code']
                 
                 if state == "active" and status_code == 'fulfilled':
-                    instance_id = responce['InstanceId']
+                    instance_id = response['InstanceId']
                     return self._wait_run_instance(instance_id, no)
                 
                 elif state == "open" and status_code == 'pending-evaluation':
@@ -726,9 +736,9 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                     self._subprocess_call(cmd, no)
                 else:
                     print(ecsub.tools.error_message (self.cluster_name, no, "Failure request-spot-instances. [Status] %s [Code] %s [Message] %s" % 
-                        (responce['State'],
-                         responce['Status']['Code'],
-                         responce['Status']['Message'])
+                        (response['State'],
+                         response['Status']['Code'],
+                         response['Status']['Message'])
                     ))
                     break
             except Exception:
@@ -761,8 +771,8 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         if log["failures"][0]["reason"] != "RESOURCE:MEMORY":
             return (None, error_message)
             
-        responce2 = boto3.client('ecs').describe_container_instances(cluster=self.cluster_arn, containerInstances=[log["failures"][0]["arn"]])
-        for resouce in responce2['containerInstances'][0]['remainingResources']:
+        response = boto3.client('ecs').describe_container_instances(cluster=self.cluster_arn, containerInstances=[log["failures"][0]["arn"]])
+        for resouce in response['containerInstances'][0]['remainingResources']:
             if resouce["name"] == "MEMORY":
                 error_message.append("remainingResources(MEMORY): %d" % (resouce["integerValue"]))
         return (None, error_message)
@@ -852,7 +862,6 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             log_group_name = self.log_group_name,
             task_id = task_arn.split("/")[1]
         )
-        #print (ecsub.tools.message (self.cluster_name, no, [{"text": " For detail, see log-file: "}, {"text": log_html, "color": ecsub.ansi.colors.CYAN}]))
         print (ecsub.tools.message (self.cluster_name, no, [{"text": " For detail, see log-file: "}, {"text": log_html, "color": ecsub.tools.get_title_color(no)}]))
 
         # set Name to instance
@@ -880,16 +889,16 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         )
         self._subprocess_call(cmd, no)
 
-        responce = boto3.client('ecs').describe_tasks(
+        response = boto3.client('ecs').describe_tasks(
             cluster=self.cluster_arn,
             tasks=[task_arn]
         )
         while True:
-            if responce["tasks"][0]['lastStatus'] != "RUNNING":
+            if response["tasks"][0]['lastStatus'] != "RUNNING":
                 break
 
             self._subprocess_call(cmd, no)
-            responce = boto3.client('ecs').describe_tasks(
+            response = boto3.client('ecs').describe_tasks(
                 cluster=self.cluster_arn,
                 tasks=[task_arn]
             )
@@ -897,32 +906,32 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         # check exit code
         log_file = self._log_path("describe-tasks.%03d" % (no))
 
-        responce["tasks"][0]["log"] = log_html
-        responce["tasks"][0]["instance_type"] = self.task_param[no]["aws_ec2_instance_type"]
-        responce["tasks"][0]["disk_size"] = self.aws_ec2_instance_disk_size
-        responce["tasks"][0]["no"] = no
-        responce["tasks"][0]["log_local"] = log_file
+        response["tasks"][0]["log"] = log_html
+        response["tasks"][0]["instance_type"] = self.task_param[no]["aws_ec2_instance_type"]
+        response["tasks"][0]["disk_size"] = self.aws_ec2_instance_disk_size
+        response["tasks"][0]["no"] = no
+        response["tasks"][0]["log_local"] = log_file
 
         def support_datetime_default(o):
             if isinstance(o, datetime.datetime):
                 return '%04d/%02d/%02d %02d:%02d:%02d %s' % (o.year, o.month, o.day, o.hour, o.minute, o.second, o.tzname())
             raise TypeError(repr(o) + " is not JSON serializable")
 
-        json.dump(responce, open(log_file, "w"), default=support_datetime_default, indent=4, separators=(',', ': '))
+        json.dump(response, open(log_file, "w"), default=support_datetime_default, indent=4, separators=(',', ': '))
         
         exit_code = 1
-        if "containers" in responce["tasks"][0]:
-            if "exitCode" in responce["tasks"][0]["containers"][0]:
-                exit_code = responce["tasks"][0]["containers"][0]["exitCode"]
+        if "containers" in response["tasks"][0]:
+            if "exitCode" in response["tasks"][0]["containers"][0]:
+                exit_code = response["tasks"][0]["containers"][0]["exitCode"]
                 print (ecsub.tools.info_message (self.cluster_name, no, "tasks-stopped with [%d]" % (exit_code)))
 
-            if "reason" in responce["tasks"][0]["containers"][0]:
+            if "reason" in response["tasks"][0]["containers"][0]:
                 if exit_code != 0:
-                    print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (responce["tasks"][0]["containers"][0]["reason"])))
+                    print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (response["tasks"][0]["containers"][0]["reason"])))
 
-        if "stoppedReason" in responce["tasks"][0]:
+        if "stoppedReason" in response["tasks"][0]:
             if exit_code != 0:
-                print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (responce["tasks"][0]["stoppedReason"])))
+                print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (response["tasks"][0]["stoppedReason"])))
 
         # check spot insatance was canceled?
         interrupt = True
@@ -932,20 +941,19 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             if exit_code == 0:
                 interrupt = False
             else:
-                responce = self._describe_spot_instances(no, request_id = ec2InstanceId)
-                if responce == None:
+                response = self._describe_spot_instances(no, request_id = ec2InstanceId)
+                if response == None:
                     interrupt = False
                 else:
-                    state = responce['State']
-                    status_code = responce['Status']['Code']
+                    state = response['State']
+                    status_code = response['Status']['Code']
                     
-                    valid_until = responce['ValidUntil']
-                    until_t = datetime.datetime.strptime(valid_until, '%Y-%m-%dT%H:%M:%S.%fZ')
+                    until_t = ecsub.tools.isoformat_to_datetime(response['ValidUntil'])
                     now_t = datetime.datetime.utcnow()
                     cancel_message = "Spot instance was cancelled. [Status] %s [Code] %s [Message] %s" % (
-                            responce['State'],
-                            responce['Status']['Code'],
-                            responce['Status']['Message'])
+                            response['State'],
+                            response['Status']['Code'],
+                            response['Status']['Message'])
                     
                     # spot-instance is running -> task mistake
                     if state == "active" and status_code == 'fulfilled':
@@ -988,11 +996,11 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             log_file = self._log_path("cancel-spot-instance-requests.%03d" % (no))
     
         if spot_req_id == None:
-            responce = self._describe_spot_instances (instance_id = instance_id)
-            if responce != None:
-                state = responce['State']
+            response = self._describe_spot_instances (instance_id = instance_id)
+            if response != None:
+                state = response['State']
                 if state == "active" or state == "open":
-                    spot_req_id = responce['SpotInstanceRequestId']
+                    spot_req_id = response['SpotInstanceRequestId']
 
         if spot_req_id != None:
             cmd_template = "{set_cmd};" \
@@ -1037,8 +1045,8 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             
         # delete cluster
         if self.cluster_arn != "":
-            responce = boto3.client('ecs').describe_clusters(clusters=[self.cluster_arn])
-            if len(responce["clusters"]) > 0:
+            response = boto3.client('ecs').describe_clusters(clusters=[self.cluster_arn])
+            if len(response["clusters"]) > 0:
                 cmd_template = "{set_cmd}; aws ecs delete-cluster --cluster {cluster} > {log}"
                 cmd = cmd_template.format(
                     set_cmd = self.set_cmd,
@@ -1050,7 +1058,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         # delete task definition
         if self.task_definition_arn != "":
             try:
-                responce = boto3.client('ecs').describe_task_definition(taskDefinition=self.task_definition_arn)
+                response = boto3.client('ecs').describe_task_definition(taskDefinition=self.task_definition_arn)
 
                 cmd_template = "{set_cmd}; aws ecs deregister-task-definition --task-definition {task} > {log}"
                 cmd = cmd_template.format(

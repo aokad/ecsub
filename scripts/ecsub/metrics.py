@@ -162,19 +162,7 @@ def entry_point(wdir):
         "cluster": {"Name": cluster["clusterName"], "Arn": cluster["clusterArn"]},
         "title": cluster["clusterName"] + ":metrics"
     }
-    # print params
     main(params)
     
 if __name__ == "__main__":
-#    params = {
-#        "wdir": "/tmp/ecsub/",
-#        "namespace": "ECSUB",
-#        "metrics": ["CPUUtilization", "DataStorageUtilization", "MemoryUtilization"],
-#        "instances": [{"Id": 'i-0b08e5e9eaacc6afd', "Name": "tasks-wordcount-FsXkH.2"}],
-#        "cluster": {"Name": "tasks-wordcount-FsXkHt", 
-#                    "Arn": 'arn:aws:ecs:ap-southeast-1:220286576909:cluster/tasks-wordcount-FsXkH',
-#                    }
-#    }
-#    main(params)
-#    entry_point("/tmp/ecsub/tasks-wordcount-bP7D8")
     pass

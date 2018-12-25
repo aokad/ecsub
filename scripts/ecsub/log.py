@@ -303,13 +303,11 @@ def main(params):
     if params["download"]:
         print (ecsub.tools.info_message(TITLE, None, "=== download log files start ==="))
         download_logs(params["wdir"], params["prefix"])
-        #download_log(params["wdir"], params["prefix"])
         print (ecsub.tools.info_message(TITLE, None, "=== download log files end ==="))
     
     if params["remove"]:
         print (ecsub.tools.info_message(TITLE, None, "=== remove log streams start ==="))
         remove_logs(params["wdir"], params["prefix"])
-        #remove_log(params["wdir"], params["prefix"])
         print (ecsub.tools.info_message(TITLE, None, "=== remove log streams end ==="))
     
     if params["download"] == False and  params["remove"] == False:
@@ -329,10 +327,4 @@ def entry_point(args, unknown_args):
     main(params)
     
 if __name__ == "__main__":
-#    params = {
-#        "wdir": "/tmp/ecsub/",
-#        "prefix": "ecsub",
-#        "remove": True
-#    }
-#    main(params)
     pass

@@ -402,7 +402,6 @@ def main(params):
                 aws_instance.clean_up()
                 ecsub.metrics.entry_point(params["wdir"])
                 
-                #print (shared_code[:])
                 # SUCCESS
                 if [0] == list(set(shared_code[:])):
                     return 0

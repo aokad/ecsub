@@ -21,17 +21,12 @@ def main(params):
     header = ["exitCode",
               "taskname",
               "no",
-              #"SCRIPT_ENVM_PATH",
               "cpu",
               "memory",
               "instance_type",
               "disk_size",
               "createdAt",
-              #"pullStartedAt",
-              #"pullStoppedAt",
-              #"startedAt",
               "stoppedAt",
-              #"log",
               "log_local",
               ]
 
