@@ -32,7 +32,7 @@ def main():
     submit_parser.add_argument("--task-name", help = "submit name as AWS ECS cluster name", type = str, default = "")
     submit_parser.add_argument("--aws-s3-bucket", help = "AWS your S3 bucket", type = str, required=True)
     submit_parser.add_argument("--aws-ec2-instance-type", help = "AWS instance type", type = str, default = "")
-    submit_parser.add_argument("--aws-ec2-instance-type-list", help = "AWS instance types, split ',' ", type = str, default = "")
+    submit_parser.add_argument("--aws-ec2-instance-type-list", help = "AWS instance types, split with ',' ", type = str, default = "")
     submit_parser.add_argument("--disk-size", help = "AWS disk size (GiB)", type = int, default = 22)
     submit_parser.add_argument("--memory", help = "Memory used by AWS ECS task (GiB)", type = int, default = 0)
     submit_parser.add_argument("--vcpu", help = "vCpu used by AWS ECS task", type = int, default = 0)

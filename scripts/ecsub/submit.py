@@ -139,22 +139,33 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
     
     return True
 
-def submit_task_ondemand(aws_instance, no):
+def _get_subnet_id (aws_instance, instance_id):
+    info = aws_instance._describe_instance(instance_id)
+    subnet_id = None
+    if info != None:
+        subnet_id = info["SubnetId"]
+    return subnet_id
 
+def submit_task_ondemand(aws_instance, no):
+    
+    exit_code = 1
+    instance_id = None
+    subnet_id = None
+    
     if aws_instance.set_ondemand_price(no):
         if aws_instance.run_instances_ondemand (no):
             (instance_id, exit_code, stop) = aws_instance.run_task(no)
             if instance_id != None:
+                subnet_id = _get_subnet_id (aws_instance, instance_id)
                 aws_instance.terminate_instances(instance_id, no)
-                return (exit_code, instance_id)
-        
-    return (1, None)
+    return (exit_code, instance_id, subnet_id)
 
 def submit_task_spot(aws_instance, no):
     
     retry = False
     exit_code = 1
     instance_id = None
+    subnet_id = None
     
     for itype in aws_instance.aws_ec2_instance_type_list:
         aws_instance.task_param[no]["aws_ec2_instance_type"] = itype
@@ -169,6 +180,7 @@ def submit_task_spot(aws_instance, no):
                 retry = True
                 
             if instance_id != None:
+                subnet_id = _get_subnet_id (aws_instance, instance_id)
                 aws_instance.terminate_instances(instance_id, no)
                 aws_instance.cancel_spot_instance_requests (no = no, instance_id = instance_id)
                 if exit_code == 0:
@@ -178,12 +190,13 @@ def submit_task_spot(aws_instance, no):
     
     if aws_instance.retry_od == False:
         retry = False
-    return (exit_code, instance_id, retry)
+    return (exit_code, instance_id, subnet_id, retry)
 
 def _hour_delta(start_t, end_t):
     return (end_t - start_t).total_seconds()/3600.0
+
+def _set_job_info(task_param, start_t, end_t, instance_id, subnet_id, exit_code):
     
-def _set_job_info(task_param, start_t, end_t, instance_id, exit_code):
     return {
         "Ec2instancetype": task_param["aws_ec2_instance_type"],
         "End": end_t,
@@ -191,6 +204,7 @@ def _set_job_info(task_param, start_t, end_t, instance_id, exit_code):
         "InstanceId": instance_id,
         "OdPrice": task_param["od_price"],
         "Start": start_t,
+        "SubnetId": subnet_id,
         "Spot": task_param["spot"],
         "SpotAz": task_param["spot_az"],
         "SpotPrice": task_param["spot_price"],
@@ -246,7 +260,7 @@ def submit_task(aws_instance, no, shared_code, spot):
         "Shell": aws_instance.shell,
         "Spot": aws_instance.spot,
         "Start": str(datetime.datetime.now()),
-        "SubnetId": aws_instance.aws_subnet_id,
+        #"SubnetId": aws_instance.aws_subnet_id,
         "TaskDefinitionAn": aws_instance.task_definition_arn,
         "UseAmazonEcr": aws_instance.use_amazon_ecr,
         "Wdir": aws_instance.wdir,
@@ -255,18 +269,24 @@ def submit_task(aws_instance, no, shared_code, spot):
     
     if spot:
         start_t = datetime.datetime.now()
-        (exit_code, instance_id, retry) = submit_task_spot(aws_instance, no)
-        job_summary["Jobs"].append(_set_job_info(aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, exit_code))
+        (exit_code, instance_id, subnet_id, retry) = submit_task_spot(aws_instance, no)
+        job_summary["Jobs"].append(_set_job_info(
+            aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
+        ))
         
         if retry:
             start_t = datetime.datetime.now()
             aws_instance.task_param[no]["aws_ec2_instance_type"] = aws_instance.aws_ec2_instance_type_list[0]
-            (exit_code, instance_id) = submit_task_ondemand(aws_instance, no)
-            job_summary["Jobs"].append(_set_job_info(aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, exit_code))
+            (exit_code, instance_id, subnet_id) = submit_task_ondemand(aws_instance, no)
+            job_summary["Jobs"].append(_set_job_info(
+                aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
+            ))
     else:
         start_t = datetime.datetime.now()        
-        (exit_code, instance_id) = submit_task_ondemand(aws_instance, no)
-        job_summary["Jobs"].append(_set_job_info(aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, exit_code))
+        (exit_code, instance_id, subnet_id) = submit_task_ondemand(aws_instance, no)
+        job_summary["Jobs"].append(_set_job_info(
+            aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
+        ))
     
     job_summary["End"] = str(datetime.datetime.now())
     job_summary["SubnetId"] = aws_instance.aws_subnet_id

@@ -114,6 +114,7 @@ class Aws_ecsub_control:
                 if tasks["header"][i]["type"] != "input":
                     continue
                 
+                print(ecsub.tools.info_message (self.cluster_name, None, "check s3-path '%s'..." % (task[i].rstrip("/"))))
                 cmd_template = "aws s3 ls {path}"
                 cmd = cmd_template.format(set_cmd = self.set_cmd, path = task[i].rstrip("/"))
                 response = self._subprocess_communicate(cmd)
@@ -125,6 +126,7 @@ class Aws_ecsub_control:
                 find = False
                 for r in response.split("\n"):
                     if r.split(" ")[-1].rstrip("/") == os.path.basename(task[i].rstrip("/")):
+                        print(ecsub.tools.info_message (self.cluster_name, None, "check s3-path '%s'...ok" % (task[i].rstrip("/"))))
                         find = True
                         break
                 if find == False:
@@ -549,6 +551,17 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         
         return self._wait_run_instance(instance_id, no)
     
+    def _describe_instance (self, instance_id):
+        response = boto3.client('ec2').describe_instances(
+            InstanceIds = [instance_id]
+        )
+        instances = None
+        try:
+            instances = response["Reservations"][0]["Instances"][0]
+        except Exception:
+            pass
+        return instances
+
     def set_ondemand_price (self, no):
         
         self.task_param[no]["spot"] = False

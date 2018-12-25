@@ -75,7 +75,6 @@ Role:
       "Effect": "Allow",
       "Principal": {
         "Service": ["ecs-tasks.amazonaws.com", "ec2.amazonaws.com"]
-        ]
       },
       "Action": "sts:AssumeRole"
     }
@@ -97,23 +96,28 @@ ecsub submit \
     [--disk-size DISK_SIZE]
 
 optional arguments:
-  --aws-ec2-instance-type TYPE    AWS instance type (default: "t2.micro")
-  --aws-key-name KEY_NAME         AWS your key pair name (default: (automatic create))
-  --aws-s3-bucket AWS_S3_BUCKET   AWS your S3 bucket
-  --aws-security-group-id SG_ID   AWS your security_group_id (default: (your "default" security group id)
-  --aws-subnet-id SUBNET_ID       AWS your subnet_id (default: (your "default" VPC's "default" subnet id)
-  --disk-size DISK_SIZE           AWS disk size (Gib) (default: 22)
-  --image IMAGE                   docker image (default: "python:2.7.14")
-  --memory MEMORY                 Memory used by AWS ECS task
+  --aws-ec2-instance-type INSTANCE_TYPE
+                                  AWS instance type
+  --aws-ec2-instance-type-list INSTANCE_TYPE_LIST 
+                                  [spot] AWS instance types, split with ','
+  --aws-key-name KEY_NAME         Your AWS key pair name
+  --aws-s3-bucket S3_BUCKET       Your AWS S3 bucket
+  --aws-security-group-id SECURITY_GROUP_ID
+                                  Your AWS security_group_id
+  --aws-subnet-id SUBNET_ID       AWS subnet_id
+  --disk-size DISK_SIZE           AWS disk size (GiB)
+  --image IMAGE                   docker image
+  --memory MEMORY                 Memory used by AWS ECS task (GiB)
+  --retry-od                      [spot] In case of failure, retry on demand instance
   --script SCRIPT                 run script
-  --shell SHELL                   path to "bash" or "ash" (or "dash", ...) in docker-container (default: "/bin/bash")
-  --spot                          use spot instance
-  --spot-params SPOT_PARAMS       AWS request-spot-instances params
-  --task-name TASK_NAME           submit name as AWS ECS cluster name (default: ${filename of "tasks" option}-${random 5 letters})
+  --shell SHELL                   path to bash or ash in docker-container
+  --spot                          [spot] use spot instance
+  --task-name TASK_NAME           submit name as AWS ECS cluster name
   --tasks TASKS                   parameters
-  --use_amazon_ecr                use_amazon_ecr (default: False)
+  --use_amazon_ecr                use_amazon_ecr
   --vcpu VCPU                     vCpu used by AWS ECS task
-  --wdir WDIR                     output temporary data (default: "./")
+  --wdir WDIR                     output temporary data
+  -h, --help                      show this help message and exit
 ```
 
 For example,
