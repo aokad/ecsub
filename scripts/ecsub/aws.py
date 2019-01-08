@@ -39,6 +39,8 @@ class Aws_ecsub_control:
         if self.aws_ec2_instance_type_list == ['']:
             self.aws_ec2_instance_type_list = [params["aws_ec2_instance_type"]]
         
+        self.aws_ecs_task_vcpu_default = 1
+        self.aws_ecs_task_memory_default = 300
         self.aws_ecs_task_vcpu = params["aws_ecs_task_vcpu"]
         self.aws_ecs_task_memory = params["aws_ecs_task_memory"]
         
@@ -55,10 +57,7 @@ class Aws_ecsub_control:
         self.s3_setenv = []
         
         self.spot = params["spot"]
-        #self.spot_az = ""
         self.retry_od = params["retry_od"]
-        #self.spot_price = 0
-        #self.od_price = 0
         
         self.task_param = []
         for i in range(task_num):
@@ -320,13 +319,21 @@ class Aws_ecsub_control:
         print(ecsub.tools.info_message (self.cluster_name, None, "EcsTaskRole: %s" % (ECSTASKROLE)))
         print(ecsub.tools.info_message (self.cluster_name, None, "DockerImage: %s" % (IMAGE_ARN)))
         
+        task_vcpu = self.aws_ecs_task_vcpu
+        if task_vcpu == 0:
+            task_vcpu = self.aws_ecs_task_vcpu_default
+        
+        task_memory = self.aws_ecs_task_memory
+        if task_memory == 0:
+            task_memory = self.aws_ecs_task_memory_default
+            
         containerDefinitions = {
             "containerDefinitions": [
                 {
                     "name": self.cluster_name + "_task",
                     "image": IMAGE_ARN,
-                    "cpu": self.aws_ecs_task_vcpu,
-                    "memory": self.aws_ecs_task_memory,
+                    "cpu": task_vcpu,
+                    "memory": task_memory,
                     "essential": True,
                       "entryPoint": [
                           self.shell,
@@ -791,11 +798,22 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         return (None, error_message)
                
     def run_task (self, no):
-
+        override_spec = ecsub.aws_config.INSTANCE_TYPE[self.task_param[no]["aws_ec2_instance_type"]]
+        
+        task_vcpu = self.aws_ecs_task_vcpu
+        if task_vcpu == 0:
+            task_vcpu = override_spec["vcpu"]
+        
+        task_memory = self.aws_ecs_task_memory
+        if task_memory == 0:
+            task_memory = int((override_spec["t.memory"] - override_spec["d.memory"]) * 1000)
+            
         # run-task
         containerOverrides = {
             "containerOverrides": [
                 {
+                    "cpu": task_vcpu,
+                    "memory": task_memory,
                     "name": self.cluster_name + "_task",
                     "environment": [
                         {
@@ -954,7 +972,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             if exit_code == 0:
                 interrupt = False
             else:
-                response = self._describe_spot_instances(no, request_id = ec2InstanceId)
+                response = self._describe_spot_instances(no, instance_id = ec2InstanceId)
                 if response == None:
                     interrupt = False
                 else:

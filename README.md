@@ -86,7 +86,7 @@ Role:
 
 ### 1) Job submit.
 
-```Bash
+```
 ecsub submit \
     --script SCRIPT \
     --tasks TASKS \
@@ -107,7 +107,7 @@ optional arguments:
   --aws-subnet-id SUBNET_ID       AWS subnet_id
   --disk-size DISK_SIZE           AWS disk size (GiB)
   --image IMAGE                   docker image
-  --memory MEMORY                 Memory used by AWS ECS task (GiB)
+  --memory MEMORY                 Memory used by AWS ECS task (MB)
   --retry-od                      [spot] In case of failure, retry on demand instance
   --script SCRIPT                 run script
   --shell SHELL                   path to bash or ash in docker-container
@@ -162,7 +162,7 @@ ecsub report --wdir /tmp/ecsub/
 ecsub creates logs on AWS CloudWatch.
 If you need, you can download log-files to local directory, and remove log-streams from AWS.
 
-```Bash
+```
 ecsub logs \
     [--wdir WDIR] \
     [--prefix PREFIX] \

@@ -34,7 +34,7 @@ def main():
     submit_parser.add_argument("--aws-ec2-instance-type", help = "AWS instance type", type = str, default = "")
     submit_parser.add_argument("--aws-ec2-instance-type-list", help = "AWS instance types, split with ',' ", type = str, default = "")
     submit_parser.add_argument("--disk-size", help = "AWS disk size (GiB)", type = int, default = 22)
-    submit_parser.add_argument("--memory", help = "Memory used by AWS ECS task (GiB)", type = int, default = 0)
+    submit_parser.add_argument("--memory", help = "Memory used by AWS ECS task (MB)", type = int, default = 0)
     submit_parser.add_argument("--vcpu", help = "vCpu used by AWS ECS task", type = int, default = 0)
     submit_parser.add_argument("--aws-security-group-id", help = "AWS your security_group_id", type = str, default = "")
     submit_parser.add_argument("--aws-key-name", help = "AWS your key pair name", type = str, default = "")

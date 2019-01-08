@@ -12,6 +12,7 @@ import string
 import random
 import datetime
 import ecsub.aws
+import ecsub.aws_config
 import ecsub.tools
 import ecsub.metrics
 
@@ -198,7 +199,7 @@ def _hour_delta(start_t, end_t):
 def _set_job_info(task_param, start_t, end_t, instance_id, subnet_id, exit_code):
     
     return {
-        "Ec2instancetype": task_param["aws_ec2_instance_type"],
+        "Ec2InstanceType": task_param["aws_ec2_instance_type"],
         "End": end_t,
         "ExitCode": exit_code,
         "InstanceId": instance_id,
@@ -223,10 +224,10 @@ def _save_summary_file(job_summary):
         
         if job["Spot"]:
             costs += job["SpotPrice"] * wtime
-            items.append(template % (job["Ec2instancetype"], "spot", job["SpotPrice"], "od", job["OdPrice"], wtime))
+            items.append(template % (job["Ec2InstanceType"], "spot", job["SpotPrice"], "od", job["OdPrice"], wtime))
         else:
             costs += job["OdPrice"] * wtime
-            items.append(template % (job["Ec2instancetype"], "ondemand", job["OdPrice"], "spot", job["SpotPrice"], wtime))            
+            items.append(template % (job["Ec2InstanceType"], "ondemand", job["OdPrice"], "spot", job["SpotPrice"], wtime))            
         
         job["Start"] = str(job["Start"])
         job["End"] = str(job["End"])
@@ -294,26 +295,6 @@ def submit_task(aws_instance, no, shared_code, spot):
     _save_summary_file(job_summary)
     shared_code[no] = exit_code
     
-def job_memory (itype_list):
-    min_memory = 0
-    for itype in itype_list:
-        mem =  ecsub.aws_config.INSTANCE_TYPE[itype]["t.memory"] * 1000 - ecsub.aws_config.INSTANCE_TYPE[itype]["d.memory"]
-        if min_memory == 0:
-            min_memory = mem
-        elif min_memory > mem:
-            min_memory = mem
-    return min_memory
-
-def job_vcpu (itype_list):
-    min_vcpu = 0
-    for itype in itype_list:
-        vcpu =  ecsub.aws_config.INSTANCE_TYPE[itype]["vcpu"]
-        if min_vcpu == 0:
-            min_vcpu = vcpu
-        elif min_vcpu > vcpu:
-            min_vcpu = vcpu
-    return min_vcpu
-    
 def main(params):
     
     # set cluster_name
@@ -325,17 +306,7 @@ def main(params):
             
     # check instance type and set task-memory, task-vpu
     if params["aws_ec2_instance_type"] != "":
-        if params["aws_ec2_instance_type"] in ecsub.aws_config.INSTANCE_TYPE:
-            if params["aws_ecs_task_memory"] == 0:
-                params["aws_ecs_task_memory"] = job_memory ([params["aws_ec2_instance_type"]])
-            else:
-                params["aws_ecs_task_memory"] = params["aws_ecs_task_memory"] * 1000
-                
-            if params["aws_ecs_task_vcpu"] == 0:
-                params["aws_ecs_task_vcpu"] = job_vcpu ([params["aws_ec2_instance_type"]])
-            else:
-                params["aws_ecs_task_vcpu"] = params["aws_ecs_task_vcpu"]
-        else:
+        if not params["aws_ec2_instance_type"] in ecsub.aws_config.INSTANCE_TYPE:
             print (ecsub.tools.error_message (params["cluster_name"], None, "instance-type %s is not defined in ecsub." % (params["aws_ec2_instance_type"])))
             return 1
             
@@ -348,16 +319,13 @@ def main(params):
             if not itype in ecsub.aws_config.INSTANCE_TYPE:
                 print (ecsub.tools.error_message (params["cluster_name"], None, "instance-type %s is not supported in ecsub." % (itype)))
                 return 1
+        if params["aws_ecs_task_vcpu"] != 0:
+            params["aws_ecs_task_vcpu"] = 0
+            print (ecsub.tools.warning_message (params["cluster_name"], None, "Under --aws-ec2-instance-type-list option, --aws_ecs_task_vcpu option is invalid."))
         
-        if params["aws_ecs_task_memory"] == 0:
-            params["aws_ecs_task_memory"] = job_memory (params["aws_ec2_instance_type_list"])
-        else:
-            params["aws_ecs_task_memory"] = params["aws_ecs_task_memory"] * 1000
-            
-        if params["aws_ecs_task_vcpu"] == 0:
-            params["aws_ecs_task_vcpu"] = job_vcpu (params["aws_ec2_instance_type_list"])
-        else:
-            params["aws_ecs_task_vcpu"] = params["aws_ecs_task_vcpu"]
+        if params["aws_ecs_task_memory"] != 0:
+            params["aws_ecs_task_memory"] = 0
+            print (ecsub.tools.warning_message (params["cluster_name"], None, "Under --aws-ec2-instance-type-list option, --aws_ecs_task_memory option is invalid."))
             
     else:
         print (ecsub.tools.error_message (params["cluster_name"], None, "One of --aws-ec2-instance-type option and --aws-ec2-instance-type-list option is required."))
