@@ -135,7 +135,7 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
     runsh = local_root + "/run.sh"
     s3_runsh = s3_root + "/run.sh"
     write_runsh(task_params, runsh, shell)
-    aws_instance.s3_copy(runsh, s3_runsh, False)
+    #aws_instance.s3_copy(runsh, s3_runsh, False)
 
     s3_setenv_list = []
     for i in range(len(task_params["tasks"])):
@@ -145,6 +145,8 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
         #aws_instance.s3_copy(setenv, s3_setenv, False)
         s3_setenv_list.append(s3_setenv)
         
+    aws_instance.s3_copy(local_root, s3_root, True)
+    
     s3_script = s3_root + "/" + os.path.basename(script)
     aws_instance.s3_copy(script, s3_script, False)
     
@@ -152,13 +154,13 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
     
     return True
 
-def upload_setenv(aws_instance, local_root, s3_root, no):
-    
-    setenv = local_root + "/setenv.%d.sh" % (no)
-    s3_setenv = s3_root + "/setenv.%d.sh" % (no)
-    aws_instance.s3_copy(setenv, s3_setenv, False, no)
-    
-    return True
+#def upload_setenv(aws_instance, local_root, s3_root, no):
+#    
+#    setenv = local_root + "/setenv.%d.sh" % (no)
+#    s3_setenv = s3_root + "/setenv.%d.sh" % (no)
+#    aws_instance.s3_copy(setenv, s3_setenv, False, no)
+#    
+#    return True
 
 def _get_subnet_id (aws_instance, instance_id):
     info = aws_instance._describe_instance(instance_id)
@@ -389,7 +391,7 @@ def main(params):
     
 #    if aws_instance.check_inputfiles(task_params):
 
-    # tasts to scripts and upload S3
+    # write task-scripts, and upload to S3
     local_script_dir = params["wdir"] + "/script"
     s3_script_dir = params["aws_s3_bucket"].rstrip("/") + "/script"
     upload_scripts(task_params, 
@@ -413,7 +415,7 @@ def main(params):
                 #if not aws_instance.check_inputfiles(task_params, i):
                 if not check_inputfiles(task_params, aws_instance, i):
                     continue
-                upload_setenv(aws_instance, local_script_dir, s3_script_dir, i)
+                #upload_setenv(aws_instance, local_script_dir, s3_script_dir, i)
                 
                 process = Process(target=submit_task, name="%s_%03d" % (params["cluster_name"], i), args=(aws_instance, i, shared_code, params["spot"]))
                 process.daemon == True
