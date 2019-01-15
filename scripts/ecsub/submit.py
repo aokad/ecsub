@@ -118,6 +118,18 @@ def write_setenv(task_params, setenv, no):
             
     f.close()
 
+def check_inputfiles(task_params, aws_instance, no):
+    
+    task = task_params["tasks"][no]
+    for i in range(len(task)):
+        if task_params["header"][i]["type"] != "input":
+            continue
+        
+        if not aws_instance.check_file(task[i].rstrip("/"), no):
+            return False
+
+    return True
+    
 def upload_scripts(task_params, aws_instance, local_root, s3_root, script, cluster_name, shell):
 
     runsh = local_root + "/run.sh"
@@ -130,13 +142,21 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
         setenv = local_root + "/setenv.%d.sh" % (i)
         s3_setenv = s3_root + "/setenv.%d.sh" % (i)
         write_setenv(task_params, setenv, i)
-        aws_instance.s3_copy(setenv, s3_setenv, False)
+        #aws_instance.s3_copy(setenv, s3_setenv, False)
         s3_setenv_list.append(s3_setenv)
         
     s3_script = s3_root + "/" + os.path.basename(script)
     aws_instance.s3_copy(script, s3_script, False)
     
     aws_instance.set_s3files(s3_runsh, s3_script, s3_setenv_list)
+    
+    return True
+
+def upload_setenv(aws_instance, local_root, s3_root, no):
+    
+    setenv = local_root + "/setenv.%d.sh" % (no)
+    s3_setenv = s3_root + "/setenv.%d.sh" % (no)
+    aws_instance.s3_copy(setenv, s3_setenv, False, no)
     
     return True
 
@@ -154,9 +174,12 @@ def submit_task_ondemand(aws_instance, no):
     subnet_id = None
     
     if aws_instance.set_ondemand_price(no):
-        if aws_instance.run_instances_ondemand (no):
-            (instance_id, exit_code, stop) = aws_instance.run_task(no)
+        instance_id0 = aws_instance.run_instances_ondemand (no)
+        if instance_id0 != None:
+            (instance_id, exit_code, stop) = aws_instance.run_task(no, instance_id0)
             if instance_id != None:
+                if instance_id != instance_id0:
+                    print (ecsub.tools.error_message (aws_instance.cluster_name, no, "%s != %s" % (instance_id, instance_id0)))
                 subnet_id = _get_subnet_id (aws_instance, instance_id)
                 aws_instance.terminate_instances(instance_id, no)
     return (exit_code, instance_id, subnet_id)
@@ -174,9 +197,12 @@ def submit_task_spot(aws_instance, no):
             continue
         if not aws_instance.set_spot_price(no):
             continue
-                
-        if aws_instance.run_instances_spot (no):
-            (instance_id, exit_code, stop) = aws_instance.run_task(no)
+        
+        instance_id0 = aws_instance.run_instances_spot (no)
+        if instance_id0 != None:
+            (instance_id, exit_code, stop) = aws_instance.run_task(no, instance_id0)
+            if instance_id != instance_id0:
+                print (ecsub.tools.error_message (aws_instance.cluster_name, no, "%s != %s" % (instance_id, instance_id0)))
             if stop:
                 retry = True
                 
@@ -283,7 +309,7 @@ def submit_task(aws_instance, no, shared_code, spot):
                 aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
             ))
     else:
-        start_t = datetime.datetime.now()        
+        start_t = datetime.datetime.now()
         (exit_code, instance_id, subnet_id) = submit_task_ondemand(aws_instance, no)
         job_summary["Jobs"].append(_set_job_info(
             aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
@@ -293,6 +319,8 @@ def submit_task(aws_instance, no, shared_code, spot):
     job_summary["SubnetId"] = aws_instance.aws_subnet_id
         
     _save_summary_file(job_summary)
+    ecsub.metrics.entry_point(aws_instance.wdir, no)
+    
     shared_code[no] = exit_code
     
 def main(params):
@@ -359,50 +387,58 @@ def main(params):
     if not aws_instance.check_awsconfigure():
         return 1
     
-    if aws_instance.check_inputfiles(task_params):
+#    if aws_instance.check_inputfiles(task_params):
 
-        # tasts to scripts and upload S3
-        upload_scripts(task_params, 
-                       aws_instance, 
-                       params["wdir"] + "/script", 
-                       params["aws_s3_bucket"].rstrip("/") + "/script",
-                       params["script"],
-                       params["cluster_name"],
-                       params["shell"])
+    # tasts to scripts and upload S3
+    local_script_dir = params["wdir"] + "/script"
+    s3_script_dir = params["aws_s3_bucket"].rstrip("/") + "/script"
+    upload_scripts(task_params, 
+                   aws_instance, 
+                   local_script_dir, 
+                   s3_script_dir,
+                   params["script"],
+                   params["cluster_name"],
+                   params["shell"])
 
-        try:
-            # create-cluster
-            # and register-task-definition
-            if aws_instance.create_cluster() and aws_instance.register_task_definition():
-    
-                # run instance and submit task
-                process_list = []
-                shared_code = Array('i', [0]*len(task_params["tasks"]))
-                for i in range(len(task_params["tasks"])):
-                    process = Process(target=submit_task, name="%s_%03d" % (params["cluster_name"], i), args=(aws_instance, i, shared_code, params["spot"]))
-                    process.daemon == True
-                    process.start()
-                    process_list.append(process)
-                
-                for process in process_list:
-                    process.join()
-                
-                aws_instance.clean_up()
-                ecsub.metrics.entry_point(params["wdir"])
-                
-                # SUCCESS
-                if [0] == list(set(shared_code[:])):
-                    return 0
+    try:
+        # create-cluster
+        # and register-task-definition
+        if aws_instance.create_cluster() and aws_instance.register_task_definition():
             
-            else:
-                aws_instance.clean_up()
+            # run instance and submit task
+            process_list = []
+            shared_code = Array('i', [0]*len(task_params["tasks"]))
+            for i in range(len(task_params["tasks"])):
+                
+                #if not aws_instance.check_inputfiles(task_params, i):
+                if not check_inputfiles(task_params, aws_instance, i):
+                    continue
+                upload_setenv(aws_instance, local_script_dir, s3_script_dir, i)
+                
+                process = Process(target=submit_task, name="%s_%03d" % (params["cluster_name"], i), args=(aws_instance, i, shared_code, params["spot"]))
+                process.daemon == True
+                process.start()
+                process_list.append(process)
             
-        except Exception as e:
-            print (ecsub.tools.error_message (params["cluster_name"], None, e))
+            for process in process_list:
+                process.join()
+            
             aws_instance.clean_up()
+            #ecsub.metrics.entry_point(params["wdir"], i)
             
-        except KeyboardInterrupt:
+            # SUCCESS
+            if [0] == list(set(shared_code[:])):
+                return 0
+        
+        else:
             aws_instance.clean_up()
+        
+    except Exception as e:
+        print (ecsub.tools.error_message (params["cluster_name"], None, e))
+        aws_instance.clean_up()
+        
+    except KeyboardInterrupt:
+        aws_instance.clean_up()
     
     return 1
     

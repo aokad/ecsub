@@ -10,6 +10,7 @@ import json
 import sys
 import os
 import datetime
+import time
 import boto3
 import ecsub.ansi
 import ecsub.aws_config
@@ -94,7 +95,6 @@ class Aws_ecsub_control:
                 line = "%s " % (str(datetime.datetime.now())) + ecsub.ansi.colors.paint("[%s:%03d]" % (self.cluster_name, no), ecsub.ansi.colors.roll_list[no % len(ecsub.ansi.colors.roll_list)]) + line
             else:
                 line = ecsub.tools.info_message (self.cluster_name, None, line)
-                #line = "[%s]" % (self.cluster_name) + line
                 
             if len(line.rstrip()) > 0:
                 sys.stdout.write(line)
@@ -106,31 +106,27 @@ class Aws_ecsub_control:
         
         return True
     
-    def check_inputfiles(self, tasks):
+    def check_file(self, path, no):
+        
+        print(ecsub.tools.info_message (self.cluster_name, no, "check s3-path '%s'..." % (path)))
+        cmd_template = "aws s3 ls {path}"
+        cmd = cmd_template.format(set_cmd = self.set_cmd, path = path)
+        response = self._subprocess_communicate(cmd)
 
-        for task in tasks["tasks"]:
-            for i in range(len(task)):
-                if tasks["header"][i]["type"] != "input":
-                    continue
-                
-                print(ecsub.tools.info_message (self.cluster_name, None, "check s3-path '%s'..." % (task[i].rstrip("/"))))
-                cmd_template = "aws s3 ls {path}"
-                cmd = cmd_template.format(set_cmd = self.set_cmd, path = task[i].rstrip("/"))
-                response = self._subprocess_communicate(cmd)
+        if response == "":
+            print(ecsub.tools.error_message (self.cluster_name, no, "s3-path '%s' is invalid." % (path)))
+            return False
 
-                if response == "":
-                    print(ecsub.tools.error_message (self.cluster_name, None, "s3-path '%s' is invalid." % (task[i])))
-                    return False
-
-                find = False
-                for r in response.split("\n"):
-                    if r.split(" ")[-1].rstrip("/") == os.path.basename(task[i].rstrip("/")):
-                        print(ecsub.tools.info_message (self.cluster_name, None, "check s3-path '%s'...ok" % (task[i].rstrip("/"))))
-                        find = True
-                        break
-                if find == False:
-                    print(ecsub.tools.error_message (self.cluster_name, None, "s3-path '%s' is invalid." % (task[i])))
-                    return False
+        find = False
+        for r in response.split("\n"):
+            if r.split(" ")[-1].rstrip("/") == os.path.basename(path):
+                print(ecsub.tools.info_message (self.cluster_name, no, "check s3-path '%s'...ok" % (path)))
+                find = True
+                break
+        if find == False:
+            print(ecsub.tools.error_message (self.cluster_name, no, "s3-path '%s' is invalid." % (path)))
+            return False
+        
         return True
 
     def check_roles(self):
@@ -169,7 +165,7 @@ class Aws_ecsub_control:
 
         return result
     
-    def s3_copy(self, src, dst, recursive):
+    def s3_copy(self, src, dst, recursive, no = None):
 
         cmd_template = "{set_cmd}; aws s3 cp --only-show-errors {r_option} {file1} {file2}"
 
@@ -183,7 +179,7 @@ class Aws_ecsub_control:
             file2 = dst,
             r_option = r_option
         )
-        self._subprocess_call(cmd)
+        self._subprocess_call(cmd, no)
         return True
 
     def set_s3files(self, s3_runsh, s3_script, s3_setenv):
@@ -316,8 +312,8 @@ class Aws_ecsub_control:
                 AWS_REGION = self.aws_region,
                 IMAGE_NAME = self.image)
 
-        print(ecsub.tools.info_message (self.cluster_name, None, "EcsTaskRole: %s" % (ECSTASKROLE)))
-        print(ecsub.tools.info_message (self.cluster_name, None, "DockerImage: %s" % (IMAGE_ARN)))
+        #print(ecsub.tools.info_message (self.cluster_name, None, "EcsTaskRole: %s" % (ECSTASKROLE)))
+        #print(ecsub.tools.info_message (self.cluster_name, None, "DockerImage: %s" % (IMAGE_ARN)))
         
         task_vcpu = self.aws_ecs_task_vcpu
         if task_vcpu == 0:
@@ -432,11 +428,6 @@ ECS_CLUSTER_NAME=\$(cat /etc/ecs/ecs.config | grep ^ECS_CLUSTER | cut -d "/" -f 
 
 disk_util=\$(df /external | awk '/external/ {{print \$5}}' | awk -F% '{{print \$1}}')
 aws cloudwatch put-metric-data --value \$disk_util --namespace ECSUB --unit Percent --metric-name DataStorageUtilization --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
-
-mem_used=\$(vmstat -s | grep "used memory" | sed s/^" "*/""/ | cut -f 1 -d " ")
-mem_free=\$(vmstat -s | grep "free memory" | sed s/^" "*/""/ | cut -f 1 -d " ")
-mem_util=\$(awk 'BEGIN{{ printf "%.0f\\n", '\$mem_used'*100/('\$mem_used'+'\$mem_free') }}')
-aws cloudwatch put-metric-data --value \$mem_util --namespace ECSUB --unit Percent --metric-name MemoryUtilization_BK --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
 
 sts=(\$(vmstat | tail -n 1))
 cpu_util=\$(awk 'BEGIN{{ printf "%.0f\\n", '\${{sts[12]}}'+'\${{sts[13]}}' }}')
@@ -554,10 +545,14 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         )
         self._subprocess_call(cmd, no)
         log = self._json_load(log_file)
-        instance_id = log["Instances"][0]["InstanceId"]
+        try:
+            instance_id = log["Instances"][0]["InstanceId"]
+            if self._wait_run_instance(instance_id, no):
+                return instance_id
+        except Exception:
+            pass
+        return None
         
-        return self._wait_run_instance(instance_id, no)
-    
     def _describe_instance (self, instance_id):
         response = boto3.client('ec2').describe_instances(
             InstanceIds = [instance_id]
@@ -734,7 +729,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             request_id = log["SpotInstanceRequests"][0]["SpotInstanceRequestId"]
         except Exception:
             print(ecsub.tools.error_message (self.cluster_name, no, "Failure request-spot-instances."))
-            return False
+            return None
         
         for i in range(3):
             response = self._describe_spot_instances(no, request_id = request_id)
@@ -745,7 +740,8 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                 
                 if state == "active" and status_code == 'fulfilled':
                     instance_id = response['InstanceId']
-                    return self._wait_run_instance(instance_id, no)
+                    if self._wait_run_instance(instance_id, no):
+                        return instance_id
                 
                 elif state == "open" and status_code == 'pending-evaluation':
                     cmd_template = "{set_cmd}; aws ec2 wait spot-instance-request-fulfilled --spot-instance-request-ids {REQUEST_ID}"
@@ -765,7 +761,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                 break
             
         self.cancel_spot_instance_requests (no = no, spot_req_id = request_id)
-        return False
+        return None
         
     def _check_memory(self, log_file):
         log = self._json_load(log_file)
@@ -797,7 +793,23 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                 error_message.append("remainingResources(MEMORY): %d" % (resouce["integerValue"]))
         return (None, error_message)
                
-    def run_task (self, no):
+    def run_task (self, no, instance_id):
+        
+        container_instance = None
+        for i in range(3):
+            response = boto3.client("ecs").list_container_instances(
+                cluster = self.cluster_arn,
+                filter = "ec2InstanceId == %s" % (instance_id)
+            )
+            try:
+                container_instance = response['containerInstanceArns'][0]
+                break
+            except Exception:
+                time.sleep(10)
+        
+        if container_instance == None:
+            return [None, None, False]
+        
         override_spec = ecsub.aws_config.INSTANCE_TYPE[self.task_param[no]["aws_ec2_instance_type"]]
         
         task_vcpu = self.aws_ecs_task_vcpu
@@ -827,18 +839,20 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         overrides = self._conf_path("containerOverrides.%03d.json" % (no))
         json.dump(containerOverrides, open(overrides, "w"), indent=4, separators=(',', ': '))
 
-        log_file = self._log_path("run-task.%03d" % (no))
+        log_file = self._log_path("start-task.%03d" % (no))
 
         cmd_template = "{set_cmd}; " \
-            + "aws ecs run-task --cluster {CLUSTER_ARN}" \
+            + "aws ecs start-task --cluster {CLUSTER_ARN}" \
             + " --task-definition {TASK_DEFINITION_ARN}" \
-            + " --overrides file://{OVERRIDES} > {log}"
+            + " --overrides file://{OVERRIDES}" \
+            + " --container-instances {INSTANCE_ID} > {log}"
 
         cmd = cmd_template.format(
             set_cmd = self.set_cmd,
             CLUSTER_ARN = self.cluster_arn,
             TASK_DEFINITION_ARN = self.task_definition_arn,
             OVERRIDES = overrides,
+            INSTANCE_ID = container_instance,
             log = log_file
         )
         self._subprocess_call(cmd, no)
@@ -849,12 +863,13 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             for msg in err_msg:
                 print (ecsub.tools.warning_message (self.cluster_name, no, msg))
             
-            log_file_retry = self._log_path("run-task-retry.%03d" % (no))
+            log_file_retry = self._log_path("start-task-retry.%03d" % (no))
             cmd = cmd_template.format(
                 set_cmd = self.set_cmd + "; sleep 10",
                 CLUSTER_ARN = self.cluster_arn,
                 TASK_DEFINITION_ARN = self.task_definition_arn,
                 OVERRIDES = overrides,
+                INSTANCE_ID = container_instance,
                 log = log_file_retry
             )
             self._subprocess_call(cmd, no)
@@ -979,7 +994,8 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                     state = response['State']
                     status_code = response['Status']['Code']
                     
-                    until_t = ecsub.tools.isoformat_to_datetime(response['ValidUntil'])
+                    #until_t = ecsub.tools.isoformat_to_datetime(response['ValidUntil'])
+                    until_t = response['ValidUntil']
                     now_t = datetime.datetime.utcnow()
                     cancel_message = "Spot instance was cancelled. [Status] %s [Code] %s [Message] %s" % (
                             response['State'],
@@ -1050,7 +1066,11 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         instance_ids = []
         for log_file in glob.glob("%s/log/run-instances.*.log" % (self.wdir)):
             log = self._json_load(log_file)
-            instance_ids.append(log["Instances"][0]["InstanceId"])
+            try:
+                instance_id = log["Instances"][0]["InstanceId"]
+                instance_ids.append(instance_id)
+            except Exception:
+                pass
         
         for log_file in glob.glob("%s/log/describe-spot-instance-requests.*.log" % (self.wdir)):
             log = self._json_load(log_file)

@@ -56,7 +56,7 @@ def _responce_to_txt(responce, start_date = None ):
     
     return [header, text, start_date]
     
-def _download_metrics(params):
+def _download_metrics(params, no):
     
     now = pytz.timezone('UTC').localize(datetime.datetime.now())
     # 15 days ago
@@ -115,7 +115,7 @@ def _download_metrics(params):
                 start_date = start_date1
             f.write(text)
 
-        print (ecsub.tools.info_message(params["title"], None, "downloaded %s %s %s" % (
+        print (ecsub.tools.info_message(params["title"], no, "downloaded %s %s %s" % (
             params['instanceName'], 
             params['metric'], 
             date.strftime("%Y/%m/%d")
@@ -124,9 +124,9 @@ def _download_metrics(params):
     f.close()
     return
     
-def main(params):
+def main(params, no):
     
-    print (ecsub.tools.info_message(params["title"], None, "=== download metrics files start ==="))
+    print (ecsub.tools.info_message(params["title"], no, "=== download metrics files start ==="))
         
     for instance in params["instances"]:
         for metric in params["metrics"]:
@@ -140,29 +140,36 @@ def main(params):
                 "instanceId": instance["Id"],
                 "instanceName": instance["Name"],
             }
-            _download_metrics(partial_params)
+            _download_metrics(partial_params, no)
 
-    print (ecsub.tools.info_message(params["title"], None, "=== download metrics files end ==="))
+    print (ecsub.tools.info_message(params["title"], no, "=== download metrics files end ==="))
 
-def entry_point(wdir):
+def entry_point(wdir, no = None):
     import json
     import glob
     
     cluster = json.load(open("%s/log/create-cluster.0.log" % (wdir)))["cluster"]
     instance_list = []
-    for tag_file in sorted(glob.glob("%s/log/create-tags*.log" % (wdir))):
-        instance = json.load(open(tag_file))
-        instance_list.append({"Id": instance["InstanceId"], "Name": instance["InstanceName"]})
-    
+    tags_template = "%s/log/create-tags.*.log" % (wdir)
+    if no != None:
+        tags_template = "%s/log/create-tags.%03d.*.log" % (wdir, no)
+        
+    for tag_file in sorted(glob.glob(tags_template)):
+        try:
+            instance = json.load(open(tag_file))
+            instance_list.append({"Id": instance["InstanceId"], "Name": instance["InstanceName"]})
+        except Exception:
+            continue
+        
     params = {
         "wdir": wdir,
         "namespace": "ECSUB",
-        "metrics": ["CPUUtilization", "DataStorageUtilization", "MemoryUtilization", "MemoryUtilization_BK"],
+        "metrics": ["CPUUtilization", "DataStorageUtilization", "MemoryUtilization"],
         "instances": instance_list,
         "cluster": {"Name": cluster["clusterName"], "Arn": cluster["clusterArn"]},
-        "title": cluster["clusterName"] + ":metrics"
+        "title": cluster["clusterName"]
     }
-    main(params)
+    main(params, no)
     
 if __name__ == "__main__":
     pass
