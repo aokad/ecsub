@@ -34,6 +34,7 @@ def main():
     submit_parser.add_argument("--aws-ec2-instance-type", help = "AWS instance type", type = str, default = "")
     submit_parser.add_argument("--aws-ec2-instance-type-list", help = "AWS instance types, split with ',' ", type = str, default = "")
     submit_parser.add_argument("--disk-size", help = "AWS disk size (GiB)", type = int, default = 22)
+    submit_parser.add_argument("--processes", help = "multi process max num", type = int, default = 20)
     submit_parser.add_argument("--memory", help = "Memory used by AWS ECS task (MB)", type = int, default = 0)
     submit_parser.add_argument("--vcpu", help = "vCpu used by AWS ECS task", type = int, default = 0)
     submit_parser.add_argument("--aws-security-group-id", help = "AWS your security_group_id", type = str, default = "")
@@ -47,6 +48,7 @@ def main():
     # report 
     report_parser = subparsers.add_parser("report", help = "view report")
     report_parser.add_argument("--wdir", help = "{PATH} when 'ecsub submit --wdir {PATH}'", type = str, default = "./")
+    report_parser.add_argument("-f", "--fail", help = "show only failured.", action = 'store_true')
     report_parser.set_defaults(func = report.entry_point)
     
     ##########

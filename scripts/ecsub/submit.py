@@ -7,10 +7,11 @@ Created on Wed Mar 14 13:06:19 2018
 
 import os
 import shutil
-from multiprocessing import Process, Array
+import multiprocessing
 import string
 import random
 import datetime
+import time
 import ecsub.aws
 import ecsub.aws_config
 import ecsub.tools
@@ -135,14 +136,12 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
     runsh = local_root + "/run.sh"
     s3_runsh = s3_root + "/run.sh"
     write_runsh(task_params, runsh, shell)
-    #aws_instance.s3_copy(runsh, s3_runsh, False)
 
     s3_setenv_list = []
     for i in range(len(task_params["tasks"])):
         setenv = local_root + "/setenv.%d.sh" % (i)
         s3_setenv = s3_root + "/setenv.%d.sh" % (i)
         write_setenv(task_params, setenv, i)
-        #aws_instance.s3_copy(setenv, s3_setenv, False)
         s3_setenv_list.append(s3_setenv)
         
     aws_instance.s3_copy(local_root, s3_root, True)
@@ -154,14 +153,6 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
     
     return True
 
-#def upload_setenv(aws_instance, local_root, s3_root, no):
-#    
-#    setenv = local_root + "/setenv.%d.sh" % (no)
-#    s3_setenv = s3_root + "/setenv.%d.sh" % (no)
-#    aws_instance.s3_copy(setenv, s3_setenv, False, no)
-#    
-#    return True
-
 def _get_subnet_id (aws_instance, instance_id):
     info = aws_instance._describe_instance(instance_id)
     subnet_id = None
@@ -169,30 +160,47 @@ def _get_subnet_id (aws_instance, instance_id):
         subnet_id = info["SubnetId"]
     return subnet_id
 
+def _run_task(aws_instance, no, instance_id):
+    
+    subnet_id = _get_subnet_id (aws_instance, instance_id)
+    exit_code = aws_instance.run_task(no, instance_id)
+
+    system_error = False
+    if exit_code == 127:
+        system_error = True
+    aws_instance.terminate_instances(instance_id, no)
+    
+    return (exit_code, subnet_id, system_error)
+
 def submit_task_ondemand(aws_instance, no):
     
     exit_code = 1
     instance_id = None
     subnet_id = None
+        
+    if not aws_instance.set_ondemand_price(no):
+        return (exit_code, instance_id, subnet_id)
     
-    if aws_instance.set_ondemand_price(no):
-        instance_id0 = aws_instance.run_instances_ondemand (no)
-        if instance_id0 != None:
-            (instance_id, exit_code, stop) = aws_instance.run_task(no, instance_id0)
-            if instance_id != None:
-                if instance_id != instance_id0:
-                    print (ecsub.tools.error_message (aws_instance.cluster_name, no, "%s != %s" % (instance_id, instance_id0)))
-                subnet_id = _get_subnet_id (aws_instance, instance_id)
-                aws_instance.terminate_instances(instance_id, no)
+    for i in range(3):
+        instance_id = aws_instance.run_instances_ondemand (no)
+        if instance_id == None:
+            break
+        
+        (exit_code, subnet_id, system_error) = _run_task(aws_instance, no, instance_id)
+            
+        if system_error:
+            continue
+        else:
+            return (exit_code, instance_id, subnet_id)
+        
     return (exit_code, instance_id, subnet_id)
 
 def submit_task_spot(aws_instance, no):
-    
-    retry = False
+
     exit_code = 1
     instance_id = None
     subnet_id = None
-    
+
     for itype in aws_instance.aws_ec2_instance_type_list:
         aws_instance.task_param[no]["aws_ec2_instance_type"] = itype
         if not aws_instance.set_ondemand_price(no):
@@ -200,26 +208,20 @@ def submit_task_spot(aws_instance, no):
         if not aws_instance.set_spot_price(no):
             continue
         
-        instance_id0 = aws_instance.run_instances_spot (no)
-        if instance_id0 != None:
-            (instance_id, exit_code, stop) = aws_instance.run_task(no, instance_id0)
-            if instance_id != instance_id0:
-                print (ecsub.tools.error_message (aws_instance.cluster_name, no, "%s != %s" % (instance_id, instance_id0)))
-            if stop:
-                retry = True
+        for i in range(3):
+            instance_id = aws_instance.run_instances_spot (no)
+            if instance_id == None:
+                break
+
+            (exit_code, subnet_id, system_error) = _run_task(aws_instance, no, instance_id)
+            aws_instance.cancel_spot_instance_requests (no = no, instance_id = instance_id)
                 
-            if instance_id != None:
-                subnet_id = _get_subnet_id (aws_instance, instance_id)
-                aws_instance.terminate_instances(instance_id, no)
-                aws_instance.cancel_spot_instance_requests (no = no, instance_id = instance_id)
-                if exit_code == 0:
-                    break
-    else:
-        retry = True
+            if system_error:
+                continue
+            else:
+                return (exit_code, instance_id, subnet_id, False)
     
-    if aws_instance.retry_od == False:
-        retry = False
-    return (exit_code, instance_id, subnet_id, retry)
+    return (exit_code, instance_id, subnet_id, True)
 
 def _hour_delta(start_t, end_t):
     return (end_t - start_t).total_seconds()/3600.0
@@ -266,7 +268,7 @@ def _save_summary_file(job_summary):
     log_file = "%s/log/summary.%03d.log" % (job_summary["Wdir"], job_summary["No"]) 
     json.dump(job_summary, open(log_file, "w"), indent=4, separators=(',', ': '), sort_keys=True)
     
-def submit_task(aws_instance, no, shared_code, spot):
+def submit_task(aws_instance, no, task_params, spot):
     
     job_summary = {
         "AccountId": aws_instance.aws_accountid,
@@ -295,36 +297,38 @@ def submit_task(aws_instance, no, shared_code, spot):
         "Wdir": aws_instance.wdir,
         "Jobs":[]
     }
-    
-    if spot:
-        start_t = datetime.datetime.now()
-        (exit_code, instance_id, subnet_id, retry) = submit_task_spot(aws_instance, no)
-        job_summary["Jobs"].append(_set_job_info(
-            aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
-        ))
-        
-        if retry:
+    if check_inputfiles(task_params, aws_instance, no):
+        if spot:
             start_t = datetime.datetime.now()
-            aws_instance.task_param[no]["aws_ec2_instance_type"] = aws_instance.aws_ec2_instance_type_list[0]
+            (exit_code, instance_id, subnet_id, retry) = submit_task_spot(aws_instance, no)
+            job_summary["Jobs"].append(_set_job_info(
+                aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
+            ))
+            
+            if aws_instance.retry_od and retry:
+                start_t = datetime.datetime.now()
+                aws_instance.task_param[no]["aws_ec2_instance_type"] = aws_instance.aws_ec2_instance_type_list[0]
+                (exit_code, instance_id, subnet_id) = submit_task_ondemand(aws_instance, no)
+                job_summary["Jobs"].append(_set_job_info(
+                    aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
+                ))
+        else:
+            start_t = datetime.datetime.now()
             (exit_code, instance_id, subnet_id) = submit_task_ondemand(aws_instance, no)
             job_summary["Jobs"].append(_set_job_info(
                 aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
             ))
-    else:
-        start_t = datetime.datetime.now()
-        (exit_code, instance_id, subnet_id) = submit_task_ondemand(aws_instance, no)
-        job_summary["Jobs"].append(_set_job_info(
-            aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
-        ))
-    
-    job_summary["End"] = str(datetime.datetime.now())
-    job_summary["SubnetId"] = aws_instance.aws_subnet_id
         
+        job_summary["SubnetId"] = aws_instance.aws_subnet_id
+        job_summary["End"] = str(datetime.datetime.now())
+        ecsub.metrics.entry_point(aws_instance.wdir, no)
+    else:
+        exit_code = 1
+        job_summary["End"] = str(datetime.datetime.now())
+    
     _save_summary_file(job_summary)
-    ecsub.metrics.entry_point(aws_instance.wdir, no)
-    
-    shared_code[no] = exit_code
-    
+    return exit_code
+
 def main(params):
     
     # set cluster_name
@@ -388,8 +392,6 @@ def main(params):
     # check task-param
     if not aws_instance.check_awsconfigure():
         return 1
-    
-#    if aws_instance.check_inputfiles(task_params):
 
     # write task-scripts, and upload to S3
     local_script_dir = params["wdir"] + "/script"
@@ -408,29 +410,22 @@ def main(params):
         if aws_instance.create_cluster() and aws_instance.register_task_definition():
             
             # run instance and submit task
-            process_list = []
-            shared_code = Array('i', [0]*len(task_params["tasks"]))
+            async_result = []
+            pool = multiprocessing.Pool(processes = params["processes"])
+
             for i in range(len(task_params["tasks"])):
-                
-                #if not aws_instance.check_inputfiles(task_params, i):
-                if not check_inputfiles(task_params, aws_instance, i):
-                    continue
-                #upload_setenv(aws_instance, local_script_dir, s3_script_dir, i)
-                
-                process = Process(target=submit_task, name="%s_%03d" % (params["cluster_name"], i), args=(aws_instance, i, shared_code, params["spot"]))
-                process.daemon == True
-                process.start()
-                process_list.append(process)
-            
-            for process in process_list:
-                process.join()
+                async_result.append(pool.apply_async(submit_task, args=(aws_instance, i, task_params, params["spot"])))
+                time.sleep(5)
+            pool.close() 
+            pool.join()
             
             aws_instance.clean_up()
-            #ecsub.metrics.entry_point(params["wdir"], i)
             
-            # SUCCESS
-            if [0] == list(set(shared_code[:])):
-                return 0
+            # success ?
+            for result in async_result:
+                if result.get() != 0:
+                    return 1
+            return 0
         
         else:
             aws_instance.clean_up()
@@ -466,6 +461,7 @@ def entry_point(args, unknown_args):
         "spot": args.spot,
         "retry_od": args.retry_od,
         "set_cmd": "set -x",
+        "processes": args.processes,
     }
     return main(params)
     

@@ -795,6 +795,8 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                
     def run_task (self, no, instance_id):
         
+        exit_code = 1
+        
         container_instance = None
         for i in range(3):
             response = boto3.client("ecs").list_container_instances(
@@ -808,7 +810,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                 time.sleep(10)
         
         if container_instance == None:
-            return [None, None, False]
+            return exit_code
         
         override_spec = ecsub.aws_config.INSTANCE_TYPE[self.task_param[no]["aws_ec2_instance_type"]]
         
@@ -877,7 +879,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             if log == None:
                 for msg in err_msg:
                     print (ecsub.tools.error_message (self.cluster_name, no, msg))
-                return [None, None, False]
+                return exit_code
 
         # get instance-ID from task-ID
         task_arn = log["tasks"][0]["taskArn"]
@@ -896,8 +898,9 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         )
         self._subprocess_call(cmd, no)
         log = self._json_load(log_file)
-        ec2InstanceId = log["containerInstances"][0]["ec2InstanceId"]
-
+        if instance_id != log["containerInstances"][0]["ec2InstanceId"]:
+            print (ecsub.tools.error_message (self.cluster_name, no, "%s != %s" % (instance_id, log["containerInstances"][0]["ec2InstanceId"])))
+        
         # get log-path
         log_html_template = "https://{region}.console.aws.amazon.com/cloudwatch/home" \
             + "?region={region}#logEventViewer:group={log_group_name};stream=ecsub/{cluster_name}_task/{task_id}"
@@ -916,12 +919,12 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
 
         cmd = cmd_template.format(
             set_cmd = self.set_cmd,
-            INSTANCE_ID = ec2InstanceId,
+            INSTANCE_ID = instance_id,
             instanceName = instanceName
         )
         self._subprocess_call(cmd, no)
         json.dump(
-            {"InstanceId": ec2InstanceId, "InstanceName": instanceName},
+            {"InstanceId": instance_id, "InstanceName": instanceName},
             open(self._log_path("create-tags.%03d" % (no)), "w")
         )
         
@@ -965,7 +968,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
 
         json.dump(response, open(log_file, "w"), default=support_datetime_default, indent=4, separators=(',', ': '))
         
-        exit_code = 1
+        #exit_code = 1
         if "containers" in response["tasks"][0]:
             if "exitCode" in response["tasks"][0]["containers"][0]:
                 exit_code = response["tasks"][0]["containers"][0]["exitCode"]
@@ -979,45 +982,47 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             if exit_code != 0:
                 print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (response["tasks"][0]["stoppedReason"])))
 
-        # check spot insatance was canceled?
-        interrupt = True
-        if self.task_param[no]["spot"] == False:
-            interrupt = False
-        else:
-            if exit_code == 0:
-                interrupt = False
-            else:
-                response = self._describe_spot_instances(no, instance_id = ec2InstanceId)
-                if response == None:
-                    interrupt = False
-                else:
-                    state = response['State']
-                    status_code = response['Status']['Code']
-                    
-                    #until_t = ecsub.tools.isoformat_to_datetime(response['ValidUntil'])
-                    until_t = response['ValidUntil']
-                    now_t = datetime.datetime.utcnow()
-                    cancel_message = "Spot instance was cancelled. [Status] %s [Code] %s [Message] %s" % (
-                            response['State'],
-                            response['Status']['Code'],
-                            response['Status']['Message'])
-                    
-                    # spot-instance is running -> task mistake
-                    if state == "active" and status_code == 'fulfilled':
-                        interrupt = False
-                    else:
-                        print(ecsub.tools.error_message (self.cluster_name, no, cancel_message))
-                    
-                        # cancelled by user
-                        if state == "cancelled" and status_code == 'instance-terminated-by-user':
-                            interrupt = False
-                        # spot instance time-out -> long long task
-                        elif now_t > until_t:
-                            interrupt = False
-                        else:
-                            interrupt = True
-                        
-        return [ec2InstanceId, exit_code, interrupt]
+#        # check spot insatance was canceled?
+#        interrupt = True
+#        if self.task_param[no]["spot"] == False:
+#            interrupt = False
+#        else:
+#            if exit_code == 0:
+#                interrupt = False
+#            elif exit_code == 127:
+#                interrupt = True
+#            else:
+#                response = self._describe_spot_instances(no, instance_id = instance_id)
+#                if response == None:
+#                    interrupt = False
+#                else:
+#                    state = response['State']
+#                    status_code = response['Status']['Code']
+#                    
+#                    #until_t = ecsub.tools.isoformat_to_datetime(response['ValidUntil'])
+#                    until_t = response['ValidUntil']
+#                    now_t = datetime.datetime.utcnow()
+#                    cancel_message = "Spot instance was cancelled. [Status] %s [Code] %s [Message] %s" % (
+#                            response['State'],
+#                            response['Status']['Code'],
+#                            response['Status']['Message'])
+#                    
+#                    # spot-instance is running -> task mistake
+#                    if state == "active" and status_code == 'fulfilled':
+#                        interrupt = False
+#                    else:
+#                        print(ecsub.tools.error_message (self.cluster_name, no, cancel_message))
+#                    
+#                        # cancelled by user
+#                        if state == "cancelled" and status_code == 'instance-terminated-by-user':
+#                            interrupt = False
+#                        # spot instance time-out -> long long task
+#                        elif now_t > until_t:
+#                            interrupt = False
+#                        else:
+#                            interrupt = True
+
+        return exit_code
 
     def terminate_instances (self, instance_id, no = None):
 
