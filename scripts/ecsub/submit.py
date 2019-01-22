@@ -126,7 +126,11 @@ def check_inputfiles(task_params, aws_instance, no):
         if task_params["header"][i]["type"] != "input":
             continue
         
-        if not aws_instance.check_file(task[i].rstrip("/"), no):
+        path = task[i].rstrip("/")
+        if path == "":
+            continue
+        
+        if not aws_instance.check_file(path, no):
             return False
 
     return True
@@ -242,10 +246,8 @@ def _set_job_info(task_param, start_t, end_t, instance_id, subnet_id, exit_code)
         "WorkHours": _hour_delta(start_t, end_t),
     }
 
-def _save_summary_file(job_summary):
-    
-    import json
-    
+def _print_cost(job_summary):
+
     template = " + instance-type %s (%s) %.3f USD (%s: %.3f USD), running-time %.3f Hour"
     costs = 0.0
     items = []
@@ -264,6 +266,10 @@ def _save_summary_file(job_summary):
         
     message = "The cost of this job is %.3f USD. \n%s" % (costs, "\n".join(items))
     print (ecsub.tools.info_message (job_summary["ClusterName"], job_summary["No"], message))
+    
+def _save_summary_file(job_summary):
+    
+    import json
 
     log_file = "%s/log/summary.%03d.log" % (job_summary["Wdir"], job_summary["No"]) 
     json.dump(job_summary, open(log_file, "w"), indent=4, separators=(',', ': '), sort_keys=True)
@@ -273,6 +279,7 @@ def submit_task(aws_instance, no, task_params, spot):
     job_summary = {
         "AccountId": aws_instance.aws_accountid,
         "AmiId": aws_instance.aws_ami_id,
+        "AutoKey": aws_instance.aws_key_auto,
         "ClusterName": aws_instance.cluster_name,
         "ClusterArn": aws_instance.cluster_arn,
         "Ec2InstanceDiskSize": aws_instance.aws_ec2_instance_disk_size,
@@ -286,7 +293,7 @@ def submit_task(aws_instance, no, task_params, spot):
         "Region": aws_instance.aws_region,
         "S3RunSh": aws_instance.s3_runsh,
         "S3Script": aws_instance.s3_script,
-        "S3Setenv": aws_instance.s3_setenv,
+        "S3Setenv": aws_instance.s3_setenv[no],
         "SecurityGroupId": aws_instance.aws_security_group_id,
         "Shell": aws_instance.shell,
         "Spot": aws_instance.spot,
@@ -297,37 +304,45 @@ def submit_task(aws_instance, no, task_params, spot):
         "Wdir": aws_instance.wdir,
         "Jobs":[]
     }
-    if check_inputfiles(task_params, aws_instance, no):
-        if spot:
-            start_t = datetime.datetime.now()
-            (exit_code, instance_id, subnet_id, retry) = submit_task_spot(aws_instance, no)
-            job_summary["Jobs"].append(_set_job_info(
-                aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
-            ))
-            
-            if aws_instance.retry_od and retry:
+    _save_summary_file(job_summary)
+    
+    try:
+        if check_inputfiles(task_params, aws_instance, no):
+            if spot:
                 start_t = datetime.datetime.now()
-                aws_instance.task_param[no]["aws_ec2_instance_type"] = aws_instance.aws_ec2_instance_type_list[0]
+                (exit_code, instance_id, subnet_id, retry) = submit_task_spot(aws_instance, no)
+                job_summary["Jobs"].append(_set_job_info(
+                    aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
+                ))
+                
+                if aws_instance.retry_od and retry:
+                    start_t = datetime.datetime.now()
+                    aws_instance.task_param[no]["aws_ec2_instance_type"] = aws_instance.aws_ec2_instance_type_list[0]
+                    (exit_code, instance_id, subnet_id) = submit_task_ondemand(aws_instance, no)
+                    job_summary["Jobs"].append(_set_job_info(
+                        aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
+                    ))
+            else:
+                start_t = datetime.datetime.now()
                 (exit_code, instance_id, subnet_id) = submit_task_ondemand(aws_instance, no)
                 job_summary["Jobs"].append(_set_job_info(
                     aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
                 ))
+            
+            job_summary["SubnetId"] = aws_instance.aws_subnet_id
+            job_summary["End"] = str(datetime.datetime.now())
+            ecsub.metrics.entry_point(aws_instance.wdir, no)
         else:
-            start_t = datetime.datetime.now()
-            (exit_code, instance_id, subnet_id) = submit_task_ondemand(aws_instance, no)
-            job_summary["Jobs"].append(_set_job_info(
-                aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
-            ))
+            exit_code = 1
+            job_summary["End"] = str(datetime.datetime.now())
         
-        job_summary["SubnetId"] = aws_instance.aws_subnet_id
-        job_summary["End"] = str(datetime.datetime.now())
-        ecsub.metrics.entry_point(aws_instance.wdir, no)
-    else:
-        exit_code = 1
-        job_summary["End"] = str(datetime.datetime.now())
-    
-    _save_summary_file(job_summary)
-    return exit_code
+        _save_summary_file(job_summary)
+        _print_cost(job_summary)
+        return exit_code
+
+    except KeyboardInterrupt:
+        pass
+    return 1
 
 def main(params):
     
@@ -404,6 +419,7 @@ def main(params):
                    params["cluster_name"],
                    params["shell"])
 
+    pool = None
     try:
         # create-cluster
         # and register-task-definition
@@ -432,9 +448,13 @@ def main(params):
         
     except Exception as e:
         print (ecsub.tools.error_message (params["cluster_name"], None, e))
+        if pool != None:
+            pool.terminate()
         aws_instance.clean_up()
         
     except KeyboardInterrupt:
+        if pool != None:
+            pool.terminate()
         aws_instance.clean_up()
     
     return 1

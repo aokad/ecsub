@@ -7,6 +7,8 @@ Created on Tue Mar 27 10:41:12 2018
 
 import ecsub.ansi
 import datetime
+import pytz
+import dateutil
 
 def get_title_color (no):
     return ecsub.ansi.colors.roll_list[no % len(ecsub.ansi.colors.roll_list)]
@@ -48,7 +50,7 @@ def datetime_to_isoformat(dt):
     return dt.isoformat() + "Z"
 
 def isoformat_to_datetime(text):
-    return datetime.datetime.strptime(text, '%Y-%m-%dT%H:%M:%S.%fZ')
+    return datetime.datetime.strptime(text, '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=pytz.utc).astimezone(dateutil.tz.tzlocal())
     
 def main():
     pass

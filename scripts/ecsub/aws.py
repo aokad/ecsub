@@ -714,7 +714,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             + " --instance-count 1" \
             + " --type 'one-time'" \
             + " --launch-specification file://{specification_file}" \
-            + " > {log}; sleep 10"
+            + " > {log};"
         
         cmd = cmd_template.format(
             set_cmd = self.set_cmd,
@@ -723,6 +723,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         )
 
         self._subprocess_call(cmd, no)
+        time.sleep(10)
         log = self._json_load(log_file)
         request_id = ""
         try:
@@ -867,7 +868,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             
             log_file_retry = self._log_path("start-task-retry.%03d" % (no))
             cmd = cmd_template.format(
-                set_cmd = self.set_cmd + "; sleep 10",
+                set_cmd = self.set_cmd + "; ",
                 CLUSTER_ARN = self.cluster_arn,
                 TASK_DEFINITION_ARN = self.task_definition_arn,
                 OVERRIDES = overrides,
@@ -875,6 +876,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                 log = log_file_retry
             )
             self._subprocess_call(cmd, no)
+            time.sleep(10)
             (log, err_msg) = self._check_memory(log_file_retry)
             if log == None:
                 for msg in err_msg:
@@ -1083,9 +1085,22 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                 instance_ids.append(log["SpotInstanceRequests"][0]["InstanceId"])
             except Exception:
                 pass
-            
+        
         if len(instance_ids) > 0:
             self.terminate_instances (" ".join(instance_ids))
+#            import math
+#            for i in range(int(math.ceil(len(instance_ids)/1000))):
+#                start = i * 1000
+#                end = start + 999
+#                if end > (len(instance_ids) - 1):
+#                    end = len(instance_ids) - 1
+#                
+#                if start == end:
+#                    print("%d,%d,%s" % (start,end,instance_ids[start]))
+#                    self.terminate_instances (instance_ids[start])
+#                else:
+#                    print("%d,%d,%s" % (start,end," ".join(instance_ids[start:end])))
+#                    self.terminate_instances (" ".join(instance_ids[start:end]))
         
         # cancel_spot_instance_requests
         req_ids = []

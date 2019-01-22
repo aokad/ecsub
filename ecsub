@@ -10,6 +10,7 @@ Created on Wed Mar 14 11:53:04 2018
 import sys
 import argparse
 import ecsub.submit as submit
+import ecsub.delete as delete
 import ecsub.report as report
 import ecsub.log as log
 from ecsub import __version__
@@ -50,6 +51,13 @@ def main():
     report_parser.add_argument("--wdir", help = "{PATH} when 'ecsub submit --wdir {PATH}'", type = str, default = "./")
     report_parser.add_argument("-f", "--fail", help = "show only failured.", action = 'store_true')
     report_parser.set_defaults(func = report.entry_point)
+    
+    ##########
+    # delete
+    delete_parser = subparsers.add_parser("delete", help = "delete job")
+    delete_parser.add_argument("task_name", help = "task name", type = str)
+    delete_parser.add_argument("--wdir", help = "{PATH} when 'ecsub submit --wdir {PATH}'", type = str, default = "./")
+    delete_parser.set_defaults(func = delete.entry_point)
     
     ##########
     # log stream 

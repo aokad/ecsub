@@ -8,6 +8,7 @@ Created on Thu Mar 22 11:46:34 2018
 import glob
 import json
 import os
+import ecsub.tools
 
 def _print(info, header, length):
     #import pprint
@@ -51,12 +52,14 @@ def _load_logs(instances, tasks):
         ilog = instances[tkey]
         spot = ""
         itype = ""
+        createAt = ""
         
         if "request-spot-instances" in os.path.basename(ilog):
             spot = "T"
             itype = "NA"
             try:
                 itype = json.load(open(ilog))["SpotInstanceRequests"][0]["LaunchSpecification"]["InstanceType"]
+                createAt = json.load(open(ilog))["SpotInstanceRequests"][0]["CreateTime"]
             except Exception:
                 pass
         else:
@@ -64,9 +67,12 @@ def _load_logs(instances, tasks):
             itype = "NA"
             try:
                 itype = json.load(open(ilog))["Instances"][0]["InstanceType"]
+                createAt = json.load(open(ilog))["Instances"][0]["LaunchTime"]
             except Exception:
                 pass
-        
+        if createAt != "":
+            createAt = ecsub.tools.isoformat_to_datetime(createAt).strftime("%Y/%m/%d %H:%M:%S %Z")
+            
         info = {
             "exitCode": "NA",
             "taskname": tkey.split("@")[0],
@@ -76,7 +82,7 @@ def _load_logs(instances, tasks):
             "memory": "NA",
             "instance_type": itype,
             "disk_size": "NA",
-            "createdAt": "NA",
+            "createdAt": createAt,
             "stoppedAt": "NA",
             "log_local": "NA",
         }
@@ -92,6 +98,8 @@ def _load_logs(instances, tasks):
                 elif ckey == "taskname":
                     continue
                 elif ckey == "no":
+                    continue
+                elif ckey == "createdAt":
                     continue
                 elif ckey == "Spot":
                     value = spot
