@@ -246,7 +246,9 @@ def _set_job_info(task_param, start_t, end_t, instance_id, subnet_id, exit_code)
         "WorkHours": _hour_delta(start_t, end_t),
     }
 
-def _print_cost(job_summary):
+def _save_summary_file(job_summary, print_cost):
+    
+    import json
 
     template = " + instance-type %s (%s) %.3f USD (%s: %.3f USD), running-time %.3f Hour"
     costs = 0.0
@@ -263,14 +265,11 @@ def _print_cost(job_summary):
         
         job["Start"] = str(job["Start"])
         job["End"] = str(job["End"])
-        
-    message = "The cost of this job is %.3f USD. \n%s" % (costs, "\n".join(items))
-    print (ecsub.tools.info_message (job_summary["ClusterName"], job_summary["No"], message))
-    
-def _save_summary_file(job_summary):
-    
-    import json
 
+    if print_cost:        
+        message = "The cost of this job is %.3f USD. \n%s" % (costs, "\n".join(items))
+        print (ecsub.tools.info_message (job_summary["ClusterName"], job_summary["No"], message))
+    
     log_file = "%s/log/summary.%03d.log" % (job_summary["Wdir"], job_summary["No"]) 
     json.dump(job_summary, open(log_file, "w"), indent=4, separators=(',', ': '), sort_keys=True)
     
@@ -304,7 +303,7 @@ def submit_task(aws_instance, no, task_params, spot):
         "Wdir": aws_instance.wdir,
         "Jobs":[]
     }
-    _save_summary_file(job_summary)
+    _save_summary_file(job_summary, False)
     
     try:
         if check_inputfiles(task_params, aws_instance, no):
@@ -336,8 +335,7 @@ def submit_task(aws_instance, no, task_params, spot):
             exit_code = 1
             job_summary["End"] = str(datetime.datetime.now())
         
-        _save_summary_file(job_summary)
-        _print_cost(job_summary)
+        _save_summary_file(job_summary, True)
         return exit_code
 
     except KeyboardInterrupt:

@@ -88,7 +88,23 @@ class TestSet(unittest.TestCase):
                 "--rm", "--dw"
             ]
             subprocess.check_call(['python', 'ecsub', 'logs'] + options)
+
+    def test5_01_delete(self):
+    
+        after = glob.glob(self.WDIR + "/*")
         
+        for b in self.before:
+            if b in after:
+                after.remove(b)
+        
+        for dir_name in after:
+            cluster_name = os.path.basename(dir_name)
+            
+            options = [
+                "--wdir", self.WDIR
+            ]
+            subprocess.check_call(['python', 'ecsub', 'delete', cluster_name] + options)
+            
 def suite():
     suite = unittest.TestSuite()
     suite.addTests(unittest.makeSuite(TestSet))

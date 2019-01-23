@@ -49,9 +49,20 @@ def base64_encode(text):
 def datetime_to_isoformat(dt):
     return dt.isoformat() + "Z"
 
+def isoformat_to_datetime2(text):
+    return datetime.datetime.strptime(text, '%Y-%m-%dT%H:%M:%S+00:00Z').replace(tzinfo=pytz.utc).astimezone(dateutil.tz.tzlocal())
+
 def isoformat_to_datetime(text):
-    return datetime.datetime.strptime(text, '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=pytz.utc).astimezone(dateutil.tz.tzlocal())
+    try:
+        return datetime.datetime.strptime(text, '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=pytz.utc).astimezone(dateutil.tz.tzlocal())
+    except Exception:
+        pass
     
+    return isoformat_to_datetime2(text)
+
+def timestamp_to_datetime(st_mtime):
+    return datetime.datetime.fromtimestamp(st_mtime).replace(tzinfo=dateutil.tz.tzlocal()).strftime("%Y/%m/%d %H:%M:%S %Z")
+            
 def main():
     pass
 

@@ -8,11 +8,11 @@ Created on Thu Mar 22 11:46:34 2018
 import glob
 import json
 import os
+import datetime
+
 import ecsub.tools
 
 def _print(info, header, length):
-    #import pprint
-    #pprint.pprint(length)
     
     text = ""
     for i in range(len(header)):
@@ -20,7 +20,7 @@ def _print(info, header, length):
         text += f % str(info[header[i]])
     print (text + "|")
 
-def _glob_to_dict(glob_text):
+def _glob(glob_text):
     
     files = []
     if type(glob_text) == type([]):
@@ -28,6 +28,11 @@ def _glob_to_dict(glob_text):
             files.extend(glob.glob(text))
     else:
         files = glob.glob(glob_text)
+    return files
+
+def _glob_to_dict(glob_text):
+    
+    files = _glob(glob_text)
         
     dic = {}
     for log in files:
@@ -44,50 +49,105 @@ def _glob_to_dict(glob_text):
                
     return dic
 
-def _load_logs(instances, tasks):
-
-    info_dict = {}
-            
-    for tkey in sorted(instances.keys()):
-        ilog = instances[tkey]
+def _run_instance_info(glob_text):
+    
+    dic_logs = _glob_to_dict(glob_text)
+    dic_info = {}
+    
+    for key in sorted(dic_logs.keys()):
+        log = dic_logs[key]
+    
+        if os.path.getsize(log) == 0:
+            continue
+        
         spot = ""
         itype = ""
         createAt = ""
+        instanceId = ""
         
-        if "request-spot-instances" in os.path.basename(ilog):
+        data = json.load(open(log))
+            
+        if "describe-spot-instance-requests" in os.path.basename(log):
             spot = "T"
             itype = "NA"
             try:
-                itype = json.load(open(ilog))["SpotInstanceRequests"][0]["LaunchSpecification"]["InstanceType"]
-                createAt = json.load(open(ilog))["SpotInstanceRequests"][0]["CreateTime"]
+                instanceId = data["SpotInstanceRequests"][0]["InstanceId"]
+                itype = data["SpotInstanceRequests"][0]["LaunchSpecification"]["InstanceType"]
+                createAt = data["SpotInstanceRequests"][0]["CreateTime"]
             except Exception:
-                pass
+                continue
+            
         else:
             spot = "F"
             itype = "NA"
             try:
-                itype = json.load(open(ilog))["Instances"][0]["InstanceType"]
-                createAt = json.load(open(ilog))["Instances"][0]["LaunchTime"]
+                instanceId = data["Instances"][0]["InstanceId"]
+                itype = data["Instances"][0]["InstanceType"]
+                createAt = data["Instances"][0]["LaunchTime"]
             except Exception:
-                pass
-        if createAt != "":
-            createAt = ecsub.tools.isoformat_to_datetime(createAt).strftime("%Y/%m/%d %H:%M:%S %Z")
+                continue
             
+        createAt = ecsub.tools.isoformat_to_datetime(createAt)
+            
+        dic_info[key] = {
+            "instanceId": instanceId,
+            "createdAt": createAt,
+            "Spot": spot,
+            "iType": itype,
+            "stoppedAt": None,
+            "Code": None,
+            "Name": None
+        }
+        
+    return dic_info
+
+def _terminate_instance_info(glob_text, dic_info):
+    
+    files = _glob(glob_text)
+
+    for log in files:
+        if os.path.getsize(log) == 0:
+            continue
+        data = json.load(open(log))
+        log_timestamp = os.stat(log).st_mtime
+               
+        for instance in data["TerminatingInstances"]:
+            
+            for key in sorted(dic_info.keys()):
+                if dic_info[key]["instanceId"] != instance["InstanceId"]:
+                    continue
+                
+                if dic_info[key]["stoppedAt"] == None or dic_info[key]["stoppedAt"] > log_timestamp:
+                    dic_info[key]["stoppedAt"] = log_timestamp
+                    dic_info[key]["Code"] = instance["CurrentState"]["Code"]
+                    dic_info[key]["Name"] = instance["CurrentState"]["Name"]
+               
+    return dic_info
+
+def _load_logs(task_logs, dic_info):
+
+    info_dict = {}
+            
+    for tkey in sorted(dic_info.keys()):
+        
+        End = "NA"
+        if dic_info[tkey]["stoppedAt"] != None:
+            End = ecsub.tools.timestamp_to_datetime(dic_info[tkey]["stoppedAt"])
         info = {
-            "exitCode": "NA",
             "taskname": tkey.split("@")[0],
             "no": tkey.split("@")[-1],
-            "Spot": spot,
+            "Spot": dic_info[tkey]["Spot"],
+            "instance_type": dic_info[tkey]["iType"],
+            "createdAt": dic_info[tkey]["createdAt"].strftime("%Y/%m/%d %H:%M:%S %Z"),
+            "stoppedAt": End,
+            "exitCode": "NA",
             "cpu": "NA",
-            "memory": "NA",
-            "instance_type": itype,
-            "disk_size": "NA",
-            "createdAt": createAt,
-            "stoppedAt": "NA",
+            "memory": "NA",              
+            "disk_size": "NA",                  
             "log_local": "NA",
         }
-        if tkey in tasks:
-            tlog = tasks[tkey]
+        if tkey in task_logs:
+            tlog = task_logs[tkey]
             task = json.load(open(tlog))["tasks"][0]
             for ckey in info.keys():
                 if ckey == "exitCode":
@@ -95,14 +155,9 @@ def _load_logs(instances, tasks):
                         value = task["containers"][0]["exitCode"]
                     else:
                         continue
-                elif ckey == "taskname":
+                elif ckey in ["taskname", "no", "Spot", "instance_type", "createdAt", "stoppedAt"]:
                     continue
-                elif ckey == "no":
-                    continue
-                elif ckey == "createdAt":
-                    continue
-                elif ckey == "Spot":
-                    value = spot
+
                 else:
                     value = task[ckey]
                     
@@ -110,16 +165,18 @@ def _load_logs(instances, tasks):
             
         info_dict[tkey] = info
     
-    #json.dump(info_dict, open("inst.json", "w"), indent=4, separators=(',', ': '), sort_keys=True)
     return info_dict
 
 def main(params):
     
-    instance_logs = _glob_to_dict([params["wdir"] + "/*/log/run-instances.*.log", 
-                                   params["wdir"] + "/*/log/request-spot-instances.*.log"])
+    dic_info = _run_instance_info([params["wdir"] + "/*/log/run-instances.*.log", 
+                                       params["wdir"] + "/*/log/describe-spot-instance-requests.*.log"])
+    
+    dic_info1 = _terminate_instance_info(params["wdir"] + "/*/log/terminate-instances.*.log", dic_info)
+    
     task_logs = _glob_to_dict(params["wdir"] + "/*/log/describe-tasks.*.log")
-
-    info_dict = _load_logs(instance_logs, task_logs)
+    
+    dic_info2 = _load_logs(task_logs, dic_info1)
     
     header = [
         "exitCode",
@@ -140,16 +197,16 @@ def main(params):
     for ckey in header:
         header_dic[ckey] = ckey
         wsize = [len(header_dic[ckey])]
-        for tkey in info_dict.keys():
-            wsize.append(len(info_dict[tkey][ckey]))
+        for tkey in dic_info2.keys():
+            wsize.append(len(dic_info2[tkey][ckey]))
         info_wmax[ckey] = max(wsize)
     
     _print(header_dic, header, info_wmax)
-    for tkey in sorted(info_dict.keys()):
+    for tkey in sorted(dic_info2.keys()):
         if params["fail"]:
-            if info_dict[tkey]["exitCode"] == "0":
+            if dic_info2[tkey]["exitCode"] == "0":
                 continue
-        _print(info_dict[tkey], header, info_wmax)
+        _print(dic_info2[tkey], header, info_wmax)
     
 def entry_point(args, unknown_args):
 
