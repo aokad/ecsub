@@ -793,7 +793,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             if resouce["name"] == "MEMORY":
                 error_message.append("remainingResources(MEMORY): %d" % (resouce["integerValue"]))
         return (None, error_message)
-               
+        
     def run_task (self, no, instance_id):
         
         exit_code = 1
@@ -811,8 +811,14 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                 time.sleep(10)
         
         if container_instance == None:
-            return exit_code
+            return (exit_code, None)
         
+        # get subnet
+        info = self._describe_instance(instance_id)
+        subnet_id = None
+        if info != None:
+            subnet_id = info["SubnetId"]
+    
         override_spec = ecsub.aws_config.INSTANCE_TYPE[self.task_param[no]["aws_ec2_instance_type"]]
         
         task_vcpu = self.aws_ecs_task_vcpu
@@ -881,7 +887,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             if log == None:
                 for msg in err_msg:
                     print (ecsub.tools.error_message (self.cluster_name, no, msg))
-                return exit_code
+                return (exit_code, None)
 
         # get instance-ID from task-ID
         task_arn = log["tasks"][0]["taskArn"]
@@ -961,8 +967,10 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         response["tasks"][0]["instance_type"] = self.task_param[no]["aws_ec2_instance_type"]
         response["tasks"][0]["disk_size"] = self.aws_ec2_instance_disk_size
         response["tasks"][0]["no"] = no
+        response["tasks"][0]["instance_id"] = instance_id
+        response["tasks"][0]["subnet_id"] = subnet_id
         response["tasks"][0]["log_local"] = log_file
-
+                
         def support_datetime_default(o):
             if isinstance(o, datetime.datetime):
                 return '%04d/%02d/%02d %02d:%02d:%02d %s' % (o.year, o.month, o.day, o.hour, o.minute, o.second, o.tzname())
@@ -1024,7 +1032,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
 #                        else:
 #                            interrupt = True
 
-        return exit_code
+        return (exit_code, log_file)
 
     def terminate_instances (self, instance_id, no = None):
 

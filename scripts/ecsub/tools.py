@@ -46,23 +46,52 @@ def base64_encode(text):
     import base64
     return base64.b64encode(text.encode('utf-8'))
 
-def datetime_to_isoformat(dt):
-    return dt.isoformat() + "Z"
+def plainformat_to_datetime(text, utc=False):
+    if len(text) != 12:
+        return None
+    
+    try:
+        dt = datetime.datetime.strptime(text + "00", '%Y%m%d%H%M%S')
+        if utc:
+            return dt.replace(tzinfo=pytz.utc).astimezone(dateutil.tz.tzlocal())
+        return dt.replace(tzinfo=dateutil.tz.tzlocal())
+    except Exception:
+        pass
+    return None
 
 def isoformat_to_datetime2(text):
-    return datetime.datetime.strptime(text, '%Y-%m-%dT%H:%M:%S+00:00Z').replace(tzinfo=pytz.utc).astimezone(dateutil.tz.tzlocal())
+    return datetime.datetime.strptime(text.rstrip("Z"), '%Y-%m-%dT%H:%M:%S+00:00').replace(tzinfo=pytz.utc).astimezone(dateutil.tz.tzlocal())
 
 def isoformat_to_datetime(text):
     try:
-        return datetime.datetime.strptime(text, '%Y-%m-%dT%H:%M:%S.%fZ').replace(tzinfo=pytz.utc).astimezone(dateutil.tz.tzlocal())
+        return datetime.datetime.strptime(text.rstrip("Z"), '%Y-%m-%dT%H:%M:%S.%f').replace(tzinfo=pytz.utc).astimezone(dateutil.tz.tzlocal())
     except Exception:
         pass
     
     return isoformat_to_datetime2(text)
 
+def standardformat_to_datetime(text):
+    try:
+        return datetime.datetime.strptime(" ".join(text.split(" ")[0:2]), "%Y/%m/%d %H:%M:%S").replace(tzinfo=dateutil.tz.tzlocal())
+    except Exception:
+        pass
+    
+    try:
+        return datetime.datetime.strptime(" ".join(text.split(" ")[0:2]), "%Y-%m-%d %H:%M:%S.%f").replace(tzinfo=dateutil.tz.tzlocal())
+    except Exception:
+        pass
+    
+    return isoformat_to_datetime(text)
+
 def timestamp_to_datetime(st_mtime):
-    return datetime.datetime.fromtimestamp(st_mtime).replace(tzinfo=dateutil.tz.tzlocal()).strftime("%Y/%m/%d %H:%M:%S %Z")
-            
+    return datetime.datetime.fromtimestamp(st_mtime).replace(tzinfo=dateutil.tz.tzlocal())
+
+def datetime_to_isoformat(dt):
+    return dt.isoformat() + "Z"
+    
+def datetime_to_standardformat(dt):
+    return dt.strftime("%Y/%m/%d %H:%M:%S %Z")
+
 def main():
     pass
 

@@ -8,7 +8,6 @@ Created on Thu Mar 22 11:46:34 2018
 import glob
 import json
 import os
-import datetime
 
 import ecsub.tools
 
@@ -124,21 +123,30 @@ def _terminate_instance_info(glob_text, dic_info):
                
     return dic_info
 
-def _load_logs(task_logs, dic_info):
+def _load_logs(params, task_logs, dic_info):
 
     info_dict = {}
             
     for tkey in sorted(dic_info.keys()):
         
+        Start = "NA"
+        if dic_info[tkey]["createdAt"] != None:
+            if params["to_date"] != None and params["to_date"] > dic_info[tkey]["createdAt"]:
+                continue
+            if params["from_date"] != None and params["from_date"] < dic_info[tkey]["createdAt"]:
+                continue
+            Start = ecsub.tools.datetime_to_standardformat(dic_info[tkey]["createdAt"])
+            
         End = "NA"
         if dic_info[tkey]["stoppedAt"] != None:
-            End = ecsub.tools.timestamp_to_datetime(dic_info[tkey]["stoppedAt"])
+            End = ecsub.tools.datetime_to_standardformat(ecsub.tools.timestamp_to_datetime(dic_info[tkey]["stoppedAt"]))
+            
         info = {
             "taskname": tkey.split("@")[0],
             "no": tkey.split("@")[-1],
             "Spot": dic_info[tkey]["Spot"],
             "instance_type": dic_info[tkey]["iType"],
-            "createdAt": dic_info[tkey]["createdAt"].strftime("%Y/%m/%d %H:%M:%S %Z"),
+            "createdAt": Start,
             "stoppedAt": End,
             "exitCode": "NA",
             "cpu": "NA",
@@ -167,7 +175,7 @@ def _load_logs(task_logs, dic_info):
     
     return info_dict
 
-def main(params):
+def main_past(params):
     
     dic_info = _run_instance_info([params["wdir"] + "/*/log/run-instances.*.log", 
                                        params["wdir"] + "/*/log/describe-spot-instance-requests.*.log"])
@@ -176,7 +184,7 @@ def main(params):
     
     task_logs = _glob_to_dict(params["wdir"] + "/*/log/describe-tasks.*.log")
     
-    dic_info2 = _load_logs(task_logs, dic_info1)
+    dic_info2 = _load_logs(params, task_logs, dic_info1)
     
     header = [
         "exitCode",
@@ -207,15 +215,146 @@ def main(params):
             if dic_info2[tkey]["exitCode"] == "0":
                 continue
         _print(dic_info2[tkey], header, info_wmax)
-    
-def entry_point(args, unknown_args):
 
+def _load_summary(params, dic_summary):
+
+    dic_info = {}
+            
+    for key in sorted(dic_summary.keys()):
+        if params["max"] > 0 and len(dic_info) >= params["max"]:
+            break
+        
+        if os.path.getsize(dic_summary[key]) == 0:
+            continue
+        
+        info = {
+            "exitCode": "NA",
+            "taskname": key.split("@")[0],
+            "no": key.split("@")[-1],
+            "Spot": "", 
+            "job_startAt": "",
+            "job_endAt": "",
+            "disk_size": "",
+            "cpu": "",
+            "memory": "",
+            "instance_type": "",
+            "instance_createAt": "",
+            "instance_stopAt": "",
+            "log_local": "",
+        }
+        
+        data = None
+        try:
+            data = json.load(open(dic_summary[key]))
+        except Exception as e:
+            #print ("[%s] %s" % (dic_summary[key], e))
+            pass
+        
+        if data != None:
+            start_t = ecsub.tools.standardformat_to_datetime(data["Start"])
+            if start_t != None:
+                if params["to_date"] != None and params["to_date"] > start_t:
+                    continue
+                if params["from_date"] != None and params["from_date"] < start_t:
+                    continue
+            
+            if data["Spot"]:
+                info["Spot"] = "T"
+            else:
+                info["Spot"] = "F"
+                
+            info["job_startAt"] = data["Start"]
+            info["job_endAt"] = data["End"]
+            info["disk_size"] = str(data["Ec2InstanceDiskSize"])
+            
+            try:
+                exit_code = str(data["Jobs"][-1]["ExitCode"])
+                if params["fail"] and exit_code == "0":
+                    continue
+                info["exitCode"] = str(data["Jobs"][-1]["ExitCode"])
+                info["instance_type"] = data["Jobs"][-1]["Ec2InstanceType"]
+                info["instance_createAt"] = data["Jobs"][-1]["Start"]
+                info["instance_stopAt"] = data["Jobs"][-1]["End"]
+                info["cpu"] = str(data["Jobs"][-1]["vCpu"])
+                info["memory"] = str(data["Jobs"][-1]["Memory"])
+                info["log_local"] = data["Jobs"][-1]["LogLocal"]
+                
+            except Exception:
+                pass
+        
+        dic_info[key] = info
+        
+    return dic_info
+
+def main(params):
+    
+    dic_summary = _glob_to_dict(params["wdir"] + "/*/log/summary.*.log")
+    dic_info = _load_summary(params, dic_summary)
+    
+    header = [
+        "exitCode",
+        "taskname",
+        "no",
+        "Spot",
+        "job_startAt",
+        "job_endAt",
+        "instance_type",
+        "cpu",
+        "memory",
+        "disk_size",
+        "instance_createAt",
+        "instance_stopAt",
+        "log_local",
+    ]
+
+    info_wmax = {}
+    header_dic = {}
+    for ckey in header:
+        header_dic[ckey] = ckey
+        wsize = [len(header_dic[ckey])]
+        for tkey in dic_info.keys():
+            if dic_info[tkey][ckey] == None:
+                continue
+            else:
+                wsize.append(len(dic_info[tkey][ckey]))
+            
+        info_wmax[ckey] = max(wsize) + 1
+    
+    _print(header_dic, header, info_wmax)
+    for tkey in sorted(dic_info.keys()):
+        _print(dic_info[tkey], header, info_wmax)
+        
+def entry_point(args, unknown_args):
+    
+    begin = None
+    if args.begin != "":
+        begin = ecsub.tools.plainformat_to_datetime(args.begin)
+        if begin == None:
+            print ("Unexpected input %s" % (args.begin))
+            return 1
+    
+    end = None
+    if args.end != "":
+        end = ecsub.tools.plainformat_to_datetime(args.end)
+        if end == None:
+            print ("Unexpected input %s" % (args.end))
+            return 1
+    
     params = {
         "wdir": args.wdir.rstrip("/"),
-        "fail": args.fail,
+        "fail": args.failed,
+        "to_date": begin,
+        "from_date": end,
+        "max": args.max,
     }
-    main(params)
+    if args.past:
+        main_past(params)
     
+    else:
+        main(params)
+    
+    return 0
+
 if __name__ == "__main__":
     params = {
         "wdir": "/tmp/ecsub/",

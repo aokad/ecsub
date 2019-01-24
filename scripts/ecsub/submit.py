@@ -5,6 +5,7 @@ Created on Wed Mar 14 13:06:19 2018
 @author: Okada
 """
 
+import boto3
 import os
 import shutil
 import multiprocessing
@@ -12,6 +13,7 @@ import string
 import random
 import datetime
 import time
+import json
 import ecsub.aws
 import ecsub.aws_config
 import ecsub.tools
@@ -119,6 +121,48 @@ def write_setenv(task_params, setenv, no):
             
     f.close()
 
+def check_inputfiles2(task_params):
+
+    files = []
+    for task in task_params["tasks"]:
+        for i in range(len(task)):
+            if task_params["header"][i]["type"] != "input":
+                continue
+            
+            path = task[i].rstrip("/")
+            if path == "":
+                continue
+            
+            files.append(path)
+    
+    file_list = sorted(list(set(files)))
+        
+    tree = {}
+    for p in file_list:
+        
+        splt = p.split("/")
+        bucket = splt[2]
+        if not bucket in tree:
+            tree[bucket] = []
+        
+        tree[bucket].append("/".join(splt[3:]))
+    
+    s3 = boto3.resource('s3')
+    for key in tree:
+        bucket = s3.Bucket(key)
+        for obj in bucket.objects.all():
+            if obj.key in tree[key]:
+                tree[key].remove(obj.key)
+            if len(tree[key]) == 0:
+                break
+    
+    result = []
+    for key in tree:
+        for path in tree[key]:
+            result.append("%s/%s" % (key, path))
+            
+    return result
+    
 def check_inputfiles(task_params, aws_instance, no):
     
     task = task_params["tasks"][no]
@@ -157,54 +201,44 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
     
     return True
 
-def _get_subnet_id (aws_instance, instance_id):
-    info = aws_instance._describe_instance(instance_id)
-    subnet_id = None
-    if info != None:
-        subnet_id = info["SubnetId"]
-    return subnet_id
-
 def _run_task(aws_instance, no, instance_id):
     
-    subnet_id = _get_subnet_id (aws_instance, instance_id)
-    exit_code = aws_instance.run_task(no, instance_id)
+    (exit_code, task_log) = aws_instance.run_task(no, instance_id)
 
     system_error = False
     if exit_code == 127:
         system_error = True
     aws_instance.terminate_instances(instance_id, no)
     
-    return (exit_code, subnet_id, system_error)
+    return (exit_code, task_log, system_error)
 
 def submit_task_ondemand(aws_instance, no):
     
     exit_code = 1
-    instance_id = None
-    subnet_id = None
-        
+    task_log = None
+    
     if not aws_instance.set_ondemand_price(no):
-        return (exit_code, instance_id, subnet_id)
+        return (exit_code, task_log)
     
     for i in range(3):
         instance_id = aws_instance.run_instances_ondemand (no)
         if instance_id == None:
             break
         
-        (exit_code, subnet_id, system_error) = _run_task(aws_instance, no, instance_id)
+        (exit_code, task_log, system_error) = _run_task(aws_instance, no, instance_id)
             
         if system_error:
             continue
         else:
-            return (exit_code, instance_id, subnet_id)
+            return (exit_code, task_log)
         
-    return (exit_code, instance_id, subnet_id)
+    return (exit_code, task_log)
 
 def submit_task_spot(aws_instance, no):
 
     exit_code = 1
-    instance_id = None
-    subnet_id = None
-
+    task_log = None
+    
     for itype in aws_instance.aws_ec2_instance_type_list:
         aws_instance.task_param[no]["aws_ec2_instance_type"] = itype
         if not aws_instance.set_ondemand_price(no):
@@ -217,39 +251,51 @@ def submit_task_spot(aws_instance, no):
             if instance_id == None:
                 break
 
-            (exit_code, subnet_id, system_error) = _run_task(aws_instance, no, instance_id)
+            (exit_code, task_log, system_error) = _run_task(aws_instance, no, instance_id)
             aws_instance.cancel_spot_instance_requests (no = no, instance_id = instance_id)
                 
             if system_error:
                 continue
             else:
-                return (exit_code, instance_id, subnet_id, False)
+                return (exit_code, task_log, False)
     
-    return (exit_code, instance_id, subnet_id, True)
+    return (exit_code, task_log, True)
 
 def _hour_delta(start_t, end_t):
     return (end_t - start_t).total_seconds()/3600.0
 
-def _set_job_info(task_param, start_t, end_t, instance_id, subnet_id, exit_code):
+def _set_job_info(task_param, start_t, end_t, task_log, exit_code):
     
-    return {
+    info = {
         "Ec2InstanceType": task_param["aws_ec2_instance_type"],
         "End": end_t,
         "ExitCode": exit_code,
-        "InstanceId": instance_id,
+        "LogLocal": task_log, 
         "OdPrice": task_param["od_price"],
         "Start": start_t,
-        "SubnetId": subnet_id,
         "Spot": task_param["spot"],
         "SpotAz": task_param["spot_az"],
         "SpotPrice": task_param["spot_price"],
         "WorkHours": _hour_delta(start_t, end_t),
+        "InstanceId": "",
+        "SubnetId": "",
+        "Memory": 0,
+        "vCpu": 0,
     }
+    
+    if task_log == None:
+        return info
+    
+    task = json.load(open(task_log))["tasks"][0]
+    info["InstanceId"] = task["instance_id"]
+    info["SubnetId"] = task["subnet_id"]
+    info["Memory"] = task["overrides"]["containerOverrides"][0]["memory"]
+    info["vCpu"] = task["overrides"]["containerOverrides"][0]["cpu"]
+
+    return info
 
 def _save_summary_file(job_summary, print_cost):
     
-    import json
-
     template = " + instance-type %s (%s) %.3f USD (%s: %.3f USD), running-time %.3f Hour"
     costs = 0.0
     items = []
@@ -263,8 +309,8 @@ def _save_summary_file(job_summary, print_cost):
             costs += job["OdPrice"] * wtime
             items.append(template % (job["Ec2InstanceType"], "ondemand", job["OdPrice"], "spot", job["SpotPrice"], wtime))            
         
-        job["Start"] = str(job["Start"])
-        job["End"] = str(job["End"])
+        job["Start"] = ecsub.tools.datetime_to_standardformat(job["Start"])
+        job["End"] = ecsub.tools.datetime_to_standardformat(job["End"])
 
     if print_cost:        
         message = "The cost of this job is %.3f USD. \n%s" % (costs, "\n".join(items))
@@ -296,8 +342,7 @@ def submit_task(aws_instance, no, task_params, spot):
         "SecurityGroupId": aws_instance.aws_security_group_id,
         "Shell": aws_instance.shell,
         "Spot": aws_instance.spot,
-        "Start": str(datetime.datetime.now()),
-        #"SubnetId": aws_instance.aws_subnet_id,
+        "Start": ecsub.tools.datetime_to_standardformat(datetime.datetime.now()),
         "TaskDefinitionAn": aws_instance.task_definition_arn,
         "UseAmazonEcr": aws_instance.use_amazon_ecr,
         "Wdir": aws_instance.wdir,
@@ -306,34 +351,35 @@ def submit_task(aws_instance, no, task_params, spot):
     _save_summary_file(job_summary, False)
     
     try:
-        if check_inputfiles(task_params, aws_instance, no):
+        #if check_inputfiles(task_params, aws_instance, no):
+        if True:
             if spot:
                 start_t = datetime.datetime.now()
-                (exit_code, instance_id, subnet_id, retry) = submit_task_spot(aws_instance, no)
+                (exit_code, task_log, retry) = submit_task_spot(aws_instance, no)
                 job_summary["Jobs"].append(_set_job_info(
-                    aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
+                    aws_instance.task_param[no], start_t, datetime.datetime.now(), task_log, exit_code
                 ))
                 
                 if aws_instance.retry_od and retry:
                     start_t = datetime.datetime.now()
                     aws_instance.task_param[no]["aws_ec2_instance_type"] = aws_instance.aws_ec2_instance_type_list[0]
-                    (exit_code, instance_id, subnet_id) = submit_task_ondemand(aws_instance, no)
+                    (exit_code, task_log) = submit_task_ondemand(aws_instance, no)
                     job_summary["Jobs"].append(_set_job_info(
-                        aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
+                        aws_instance.task_param[no], start_t, datetime.datetime.now(), task_log, exit_code
                     ))
             else:
                 start_t = datetime.datetime.now()
-                (exit_code, instance_id, subnet_id) = submit_task_ondemand(aws_instance, no)
+                (exit_code, task_log) = submit_task_ondemand(aws_instance, no)
                 job_summary["Jobs"].append(_set_job_info(
-                    aws_instance.task_param[no], start_t, datetime.datetime.now(), instance_id, subnet_id, exit_code
+                    aws_instance.task_param[no], start_t, datetime.datetime.now(), task_log, exit_code
                 ))
             
             job_summary["SubnetId"] = aws_instance.aws_subnet_id
-            job_summary["End"] = str(datetime.datetime.now())
+            job_summary["End"] = ecsub.tools.datetime_to_standardformat(datetime.datetime.now())
             ecsub.metrics.entry_point(aws_instance.wdir, no)
         else:
             exit_code = 1
-            job_summary["End"] = str(datetime.datetime.now())
+            job_summary["End"] = ecsub.tools.datetime_to_standardformat(datetime.datetime.now())
         
         _save_summary_file(job_summary, True)
         return exit_code
@@ -406,6 +452,13 @@ def main(params):
     if not aws_instance.check_awsconfigure():
         return 1
 
+    # check s3-files path
+    result = check_inputfiles2(task_params)
+    for r in result:
+        print (ecsub.tools.info_message (params["cluster_name"], None, "input '%s' is not exist." % (r)))
+    if len(result)> 0:
+        return 1
+    
     # write task-scripts, and upload to S3
     local_script_dir = params["wdir"] + "/script"
     s3_script_dir = params["aws_s3_bucket"].rstrip("/") + "/script"
