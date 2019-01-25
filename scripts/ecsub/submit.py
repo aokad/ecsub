@@ -121,46 +121,72 @@ def write_setenv(task_params, setenv, no):
             
     f.close()
 
-def check_inputfiles2(task_params):
+def check_inputfiles2(task_params, cluster_name):
 
     files = []
+    dirs = []
     for task in task_params["tasks"]:
         for i in range(len(task)):
             if task_params["header"][i]["type"] != "input":
                 continue
             
-            path = task[i].rstrip("/")
+            path = task[i].replace("s3://", "", 1).strip("/").rstrip("/")
             if path == "":
                 continue
             
-            files.append(path)
+            if task_params["header"][i]["recursive"]:
+                dirs.append(path)
+            else:
+                files.append(path)
     
     file_list = sorted(list(set(files)))
-        
+    dir_list = sorted(list(set(dirs)))
+    
+    uncheck_dirs = []
+    uncheck_dirs.extend(dir_list)
+    for d in dir_list:
+        for f in file_list:
+            if f.startswith(d):
+                uncheck_dirs.remove(d)
+                break
+
     tree = {}
-    for p in file_list:
-        
-        splt = p.split("/")
-        bucket = splt[2]
+    for path in file_list:
+        bucket = path.split("/")[0]
         if not bucket in tree:
-            tree[bucket] = []
-        
-        tree[bucket].append("/".join(splt[3:]))
+            tree[bucket] = {}
+            tree[bucket]["files"] = []
+            tree[bucket]["dirs"] = []
+        tree[bucket]["files"].append(path.replace(bucket + "/", "", 1))
+
+    for path in uncheck_dirs:
+        bucket = path.split("/")[0]
+        if not bucket in tree:
+            tree[bucket] = {}
+            tree[bucket]["files"] = []
+            tree[bucket]["dirs"] = []
+        tree[bucket]["dirs"].append(path.replace(bucket + "/", "", 1))
     
     s3 = boto3.resource('s3')
     for key in tree:
         bucket = s3.Bucket(key)
+        print (ecsub.tools.info_message (cluster_name, None, "checking s3 bucket '%s'..." % (key)))
         for obj in bucket.objects.all():
-            if obj.key in tree[key]:
-                tree[key].remove(obj.key)
-            if len(tree[key]) == 0:
+            if obj.key in tree[key]["files"]:
+                tree[key]["files"].remove(obj.key)
+
+            match = [s for s in tree[key]["dirs"] if obj.key.startswith(s)]
+            for d in match:
+                tree[key]["dirs"].remove(d)
+            if len(tree[key]["files"]) == 0 and len(tree[key]["dirs"]) == 0:
                 break
-    
+            
     result = []
     for key in tree:
-        for path in tree[key]:
-            result.append("%s/%s" % (key, path))
-            
+        for typ in tree[key]:
+            for path in tree[key][typ]:
+                result.append("%s/%s" % (key, path))
+    
     return result
     
 def check_inputfiles(task_params, aws_instance, no):
@@ -203,11 +229,18 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
 
 def _run_task(aws_instance, no, instance_id):
     
-    (exit_code, task_log) = aws_instance.run_task(no, instance_id)
-
     system_error = False
-    if exit_code == 127:
-        system_error = True
+    exit_code = 1
+    task_log = None
+    
+    try:
+        (exit_code, task_log) = aws_instance.run_task(no, instance_id)
+        if exit_code == 127:
+            system_error = True
+    
+    except Exception as e:
+        print (ecsub.tools.error_message (aws_instance.cluster_name, no, e))
+    
     aws_instance.terminate_instances(instance_id, no)
     
     return (exit_code, task_log, system_error)
@@ -399,7 +432,8 @@ def main(params):
             
     # check instance type and set task-memory, task-vpu
     if params["aws_ec2_instance_type"] != "":
-        if not params["aws_ec2_instance_type"] in ecsub.aws_config.INSTANCE_TYPE:
+        #if not params["aws_ec2_instance_type"] in ecsub.aws_config.INSTANCE_TYPE:
+        if not params["aws_ec2_instance_type"].split(".")[0] in ecsub.aws_config.SUPPORT_FAMILY:
             print (ecsub.tools.error_message (params["cluster_name"], None, "instance-type %s is not defined in ecsub." % (params["aws_ec2_instance_type"])))
             return 1
             
@@ -409,7 +443,8 @@ def main(params):
             return 1
         
         for itype in params["aws_ec2_instance_type_list"]:
-            if not itype in ecsub.aws_config.INSTANCE_TYPE:
+            #if not itype in ecsub.aws_config.INSTANCE_TYPE:
+            if not itype.split(".")[0] in ecsub.aws_config.SUPPORT_FAMILY:
                 print (ecsub.tools.error_message (params["cluster_name"], None, "instance-type %s is not supported in ecsub." % (itype)))
                 return 1
         if params["aws_ecs_task_vcpu"] != 0:
@@ -453,9 +488,9 @@ def main(params):
         return 1
 
     # check s3-files path
-    result = check_inputfiles2(task_params)
+    result = check_inputfiles2(task_params, params["cluster_name"])
     for r in result:
-        print (ecsub.tools.info_message (params["cluster_name"], None, "input '%s' is not exist." % (r)))
+        print (ecsub.tools.error_message (params["cluster_name"], None, "input '%s' is not exist." % (r)))
     if len(result)> 0:
         return 1
     

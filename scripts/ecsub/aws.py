@@ -564,6 +564,18 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             pass
         return instances
 
+    def _describe_container_instance (self, cluster, instance_id):
+        response = boto3.client('ecs').describe_container_instances(
+            cluster = cluster,
+            containerInstances = [instance_id]
+        )
+        instances = None
+        try:
+            instances = response["containerInstances"][0]
+        except Exception:
+            pass
+        return instances
+    
     def set_ondemand_price (self, no):
         
         self.task_param[no]["spot"] = False
@@ -665,9 +677,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         
         if not 'SpotInstanceRequests' in response:
             return None
-        
-        #import pprint
-        #pprint.pprint(response)
+
         import copy
         response_cp = copy.deepcopy(response)
         r0 = response['SpotInstanceRequests'][0]
@@ -795,6 +805,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         return (None, error_message)
         
     def run_task (self, no, instance_id):
+        import math
         
         exit_code = 1
         
@@ -814,20 +825,37 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             return (exit_code, None)
         
         # get subnet
-        info = self._describe_instance(instance_id)
+        inst_info = self._describe_instance(instance_id)
         subnet_id = None
-        if info != None:
-            subnet_id = info["SubnetId"]
+        if inst_info != None:
+            subnet_id = inst_info["SubnetId"]
     
-        override_spec = ecsub.aws_config.INSTANCE_TYPE[self.task_param[no]["aws_ec2_instance_type"]]
+        cont_info = self._describe_container_instance (self.cluster_arn, container_instance.split("/")[-1])
+        if cont_info == None:
+            return (exit_code, None)
         
-        task_vcpu = self.aws_ecs_task_vcpu
-        if task_vcpu == 0:
-            task_vcpu = override_spec["vcpu"]
+        task_vcpu = 0
+        task_memory = 0
+        for resource in cont_info['remainingResources']:
+            if resource["name"] == "CPU":
+                task_vcpu = int(math.floor(resource['integerValue']/1000))
+                if task_vcpu == 0:
+                    print(ecsub.tools.error_message(self.cluster_name, no, "remainingResources(CPU): %d" % (resource["integerValue"])))
+                    return (exit_code, None)
+            elif resource["name"] == "MEMORY":
+                task_memory = int(math.floor(resource['integerValue']/100) * 100)
+            else:
+                continue
         
-        task_memory = self.aws_ecs_task_memory
-        if task_memory == 0:
-            task_memory = int((override_spec["t.memory"] - override_spec["d.memory"]) * 1000)
+#        override_spec = ecsub.aws_config.INSTANCE_TYPE[self.task_param[no]["aws_ec2_instance_type"]]
+#        
+#        task_vcpu = self.aws_ecs_task_vcpu
+#        if task_vcpu == 0:
+#            task_vcpu = override_spec["vcpu"]
+#        
+#        task_memory = self.aws_ecs_task_memory
+#        if task_memory == 0:
+#            task_memory = int((override_spec["t.memory"] - override_spec["d.memory"]) * 1000)
             
         # run-task
         containerOverrides = {
@@ -874,7 +902,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             
             log_file_retry = self._log_path("start-task-retry.%03d" % (no))
             cmd = cmd_template.format(
-                set_cmd = self.set_cmd + "; ",
+                set_cmd = self.set_cmd,
                 CLUSTER_ARN = self.cluster_arn,
                 TASK_DEFINITION_ARN = self.task_definition_arn,
                 OVERRIDES = overrides,

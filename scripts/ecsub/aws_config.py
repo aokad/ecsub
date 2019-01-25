@@ -5,13 +5,27 @@ Created on Tue Mar 20 12:54:32 2018
 @author: Okada
 """
 
+SUPPORT_FAMILY = [
+ "c4", "c5", "c5d",
+ "d2",
+ "g3", "g3s",
+ "i2", "i3",
+ "m4", "m5",
+ "p2", "p3",
+ "r4", "r5", "r5d",
+ "t2", "t3",
+ "x1", "x1e",
+ "z1d",
+]
+
+"""
 INSTANCE_TYPE = {
     "c4.2xlarge"  : {"vcpu":   8, "t.memory":   15, "d.memory":  0.2},
     "c4.4xlarge"  : {"vcpu":  16, "t.memory":   30, "d.memory":  0.2},
     "c4.8xlarge"  : {"vcpu":  36, "t.memory":   60, "d.memory":  0.2},
     "c4.large"    : {"vcpu":   2, "t.memory": 3.75, "d.memory":  0.2},
     "c4.xlarge"   : {"vcpu":   4, "t.memory":  7.5, "d.memory":  0.2},
-    "c5.18xlarge" : {"vcpu":  72, "t.memory":  144, "d.memory":  0.2},
+    "c5.18xlarge" : {"vcpu":  72, "t.memory":  144, "d.memory":  4.0},
     "c5.2xlarge"  : {"vcpu":   8, "t.memory":   16, "d.memory":  0.2},
     "c5.4xlarge"  : {"vcpu":  16, "t.memory":   32, "d.memory":  0.2},
     "c5.9xlarge"  : {"vcpu":  36, "t.memory":   72, "d.memory":  0.2},
@@ -83,12 +97,12 @@ INSTANCE_TYPE = {
     "g3s.xlarge"  : {"vcpu":   4, "t.memory": 30.5, "d.memory":  0.2},
     "i3.metal"    : {"vcpu":  72, "t.memory":  512, "d.memory":  0.2},
     # add. 2018/12/14
-    #"m5d.12xlarge": {"vcpu":  48, "t.memory":  192, "d.memory":  0.2},
-    #"m5d.24xlarge": {"vcpu":  96, "t.memory":  384, "d.memory":  0.2},
-    #"m5d.2xlarge" : {"vcpu":   8, "t.memory":   32, "d.memory":  0.2},
-    #"m5d.4xlarge" : {"vcpu":  16, "t.memory":   64, "d.memory":  0.2},
-    #"m5d.large"   : {"vcpu":   2, "t.memory":    8, "d.memory":  0.2},
-    #"m5d.xlarge"  : {"vcpu":   4, "t.memory":   16, "d.memory":  0.2},
+    "m5d.12xlarge": {"vcpu":  48, "t.memory":  192, "d.memory":  0.2},
+    "m5d.24xlarge": {"vcpu":  96, "t.memory":  384, "d.memory":  0.2},
+    "m5d.2xlarge" : {"vcpu":   8, "t.memory":   32, "d.memory":  0.2},
+    "m5d.4xlarge" : {"vcpu":  16, "t.memory":   64, "d.memory":  0.2},
+    "m5d.large"   : {"vcpu":   2, "t.memory":    8, "d.memory":  0.2},
+    "m5d.xlarge"  : {"vcpu":   4, "t.memory":   16, "d.memory":  0.2},
     "r5.12xlarge" : {"vcpu":  48, "t.memory":  384, "d.memory":  0.2},
     "r5.24xlarge" : {"vcpu":  96, "t.memory":  768, "d.memory":  0.2},
     "r5.2xlarge"  : {"vcpu":   8, "t.memory":   64, "d.memory":  0.2},
@@ -114,7 +128,7 @@ INSTANCE_TYPE = {
     "z1d.large"   : {"vcpu":   2, "t.memory":   16, "d.memory":  0.2},
     "z1d.xlarge"  : {"vcpu":   4, "t.memory":   32, "d.memory":  0.2},
 }
-
+"""
 def get_ami_id():
     import boto3
     data=boto3.client("ssm").get_parameters(Names=["/aws/service/ecs/optimized-ami/amazon-linux/recommended/image_id"])
