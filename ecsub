@@ -35,9 +35,7 @@ def main():
     submit_parser.add_argument("--aws-ec2-instance-type", metavar = "t2.micro", help = "AWS instance type", type = str, default = "")
     submit_parser.add_argument("--aws-ec2-instance-type-list", metavar = "t3.micro,t2.micro", help = "AWS instance types, split with ',' ", type = str, default = "")
     submit_parser.add_argument("--disk-size", metavar = 22, help = "AWS disk size (GiB)", type = int, default = 22)
-    submit_parser.add_argument("--processes", metavar = 20, help = "multi process max num", type = int, default = 20)
-    submit_parser.add_argument("--memory", metavar = 8, help = "Memory used by AWS ECS task (MB)", type = int, default = 0)
-    submit_parser.add_argument("--vcpu", metavar = 1, help = "vCpu used by AWS ECS task", type = int, default = 0)
+    submit_parser.add_argument("--processes", metavar = 20, help = "maximum multi processes", type = int, default = 20)
     submit_parser.add_argument("--aws-security-group-id", metavar = "sg-ab123456", help = "AWS your security_group_id", type = str, default = "")
     submit_parser.add_argument("--aws-key-name", metavar = "key-123ab", help = "AWS your key pair name", type = str, default = "")
     submit_parser.add_argument("--aws-subnet-id", metavar = "subnet-123456ab", help = "AWS subnet_id", type = str, default = "")
@@ -54,6 +52,18 @@ def main():
     report_parser.add_argument("-b", "--begin", metavar = "[YYYYMMDDhhmm]", help = "The earliest createdAt time for jobs to be summarized, in the format [YYYYMMDDhhmm]", type = str, default = "")
     report_parser.add_argument("-e", "--end", metavar = "[YYYYMMDDhhmm]", help = "The latest createdAt time for jobs to be summarized, in the format [YYYYMMDDhhmm]", type = str, default = "")
     report_parser.add_argument("--max", metavar = "20", help = "Maximum display count", type = int, default = 0)
+    report_parser.add_argument("--sortby", metavar = "sort_key", choices=[
+            "exitCode",
+            "taskname",
+            "job_startAt",
+            "job_endAt",
+            "instance_type",
+            "cpu",
+            "memory",
+            "disk_size",
+            "instance_createAt",
+            "instance_stopAt"
+        ], help = "Sort summary key", default = "taskname")
     report_parser.set_defaults(func = report.entry_point)
     
     ##########

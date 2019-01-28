@@ -35,16 +35,12 @@ class Aws_ecsub_control:
         self.log_group_name = "ecsub-" + self.cluster_name
         
         self.aws_ami_id = ecsub.aws_config.get_ami_id()
-        #self.aws_ec2_instance_type = params["aws_ec2_instance_type"]
         self.aws_ec2_instance_type_list = params["aws_ec2_instance_type_list"]
         if self.aws_ec2_instance_type_list == ['']:
             self.aws_ec2_instance_type_list = [params["aws_ec2_instance_type"]]
         
         self.aws_ecs_task_vcpu_default = 1
         self.aws_ecs_task_memory_default = 300
-        self.aws_ecs_task_vcpu = params["aws_ecs_task_vcpu"]
-        self.aws_ecs_task_memory = params["aws_ecs_task_memory"]
-        
         self.aws_ec2_instance_disk_size = params["aws_ec2_instance_disk_size"]
         self.aws_subnet_id = params["aws_subnet_id"]
         self.image = params["image"]
@@ -314,22 +310,14 @@ class Aws_ecsub_control:
 
         #print(ecsub.tools.info_message (self.cluster_name, None, "EcsTaskRole: %s" % (ECSTASKROLE)))
         #print(ecsub.tools.info_message (self.cluster_name, None, "DockerImage: %s" % (IMAGE_ARN)))
-        
-        task_vcpu = self.aws_ecs_task_vcpu
-        if task_vcpu == 0:
-            task_vcpu = self.aws_ecs_task_vcpu_default
-        
-        task_memory = self.aws_ecs_task_memory
-        if task_memory == 0:
-            task_memory = self.aws_ecs_task_memory_default
             
         containerDefinitions = {
             "containerDefinitions": [
                 {
                     "name": self.cluster_name + "_task",
                     "image": IMAGE_ARN,
-                    "cpu": task_vcpu,
-                    "memory": task_memory,
+                    "cpu": self.aws_ecs_task_vcpu_default,
+                    "memory": self.aws_ecs_task_memory_default,
                     "essential": True,
                       "entryPoint": [
                           self.shell,
@@ -846,17 +834,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                 task_memory = int(math.floor(resource['integerValue']/100) * 100)
             else:
                 continue
-        
-#        override_spec = ecsub.aws_config.INSTANCE_TYPE[self.task_param[no]["aws_ec2_instance_type"]]
-#        
-#        task_vcpu = self.aws_ecs_task_vcpu
-#        if task_vcpu == 0:
-#            task_vcpu = override_spec["vcpu"]
-#        
-#        task_memory = self.aws_ecs_task_memory
-#        if task_memory == 0:
-#            task_memory = int((override_spec["t.memory"] - override_spec["d.memory"]) * 1000)
-            
+
         # run-task
         containerOverrides = {
             "containerOverrides": [

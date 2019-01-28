@@ -361,8 +361,6 @@ def submit_task(aws_instance, no, task_params, spot):
         "ClusterName": aws_instance.cluster_name,
         "ClusterArn": aws_instance.cluster_arn,
         "Ec2InstanceDiskSize": aws_instance.aws_ec2_instance_disk_size,
-        "EcsTaskMemory": aws_instance.aws_ecs_task_memory,
-        "EcsTaskVcpu": aws_instance.aws_ecs_task_vcpu,
         "End": None,
         "Image": aws_instance.image,
         "KeyName": aws_instance.aws_key_name,
@@ -430,31 +428,15 @@ def main(params):
             + '-' \
             + ''.join([random.choice(string.ascii_letters + string.digits) for i in range(5)])
             
-    # check instance type and set task-memory, task-vpu
+    # check param
     if params["aws_ec2_instance_type"] != "":
-        #if not params["aws_ec2_instance_type"] in ecsub.aws_config.INSTANCE_TYPE:
-        if not params["aws_ec2_instance_type"].split(".")[0] in ecsub.aws_config.SUPPORT_FAMILY:
-            print (ecsub.tools.error_message (params["cluster_name"], None, "instance-type %s is not defined in ecsub." % (params["aws_ec2_instance_type"])))
-            return 1
+        pass
             
     elif len(params["aws_ec2_instance_type_list"]) > 0:
         if not params["spot"]:
             print (ecsub.tools.error_message (params["cluster_name"], None, "--aws-ec2-instance-type-list option is not support with ondemand-instance mode."))
             return 1
         
-        for itype in params["aws_ec2_instance_type_list"]:
-            #if not itype in ecsub.aws_config.INSTANCE_TYPE:
-            if not itype.split(".")[0] in ecsub.aws_config.SUPPORT_FAMILY:
-                print (ecsub.tools.error_message (params["cluster_name"], None, "instance-type %s is not supported in ecsub." % (itype)))
-                return 1
-        if params["aws_ecs_task_vcpu"] != 0:
-            params["aws_ecs_task_vcpu"] = 0
-            print (ecsub.tools.warning_message (params["cluster_name"], None, "Under --aws-ec2-instance-type-list option, --aws_ecs_task_vcpu option is invalid."))
-        
-        if params["aws_ecs_task_memory"] != 0:
-            params["aws_ecs_task_memory"] = 0
-            print (ecsub.tools.warning_message (params["cluster_name"], None, "Under --aws-ec2-instance-type-list option, --aws_ecs_task_memory option is invalid."))
-            
     else:
         print (ecsub.tools.error_message (params["cluster_name"], None, "One of --aws-ec2-instance-type option and --aws-ec2-instance-type-list option is required."))
         return 1
@@ -558,8 +540,6 @@ def entry_point(args, unknown_args):
         "aws_ec2_instance_type": args.aws_ec2_instance_type,
         "aws_ec2_instance_type_list": args.aws_ec2_instance_type_list.replace(" ", "").split(","),
         "aws_ec2_instance_disk_size": args.disk_size,
-        "aws_ecs_task_memory": args.memory,
-        "aws_ecs_task_vcpu": args.vcpu,
         "aws_s3_bucket": args.aws_s3_bucket,
         "aws_security_group_id": args.aws_security_group_id,
         "aws_key_name": args.aws_key_name,

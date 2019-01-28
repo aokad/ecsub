@@ -265,6 +265,8 @@ def _load_summary(params, dic_summary):
                 
             info["job_startAt"] = data["Start"]
             info["job_endAt"] = data["End"]
+            if info["job_endAt"] == None:
+                info["job_endAt"] = ""
             info["disk_size"] = str(data["Ec2InstanceDiskSize"])
             
             try:
@@ -286,6 +288,16 @@ def _load_summary(params, dic_summary):
         
     return dic_info
 
+def sort_dic(dic, key_name):
+    sorted_dic = {}
+    for key in sorted(dic.keys()):
+        value = dic[key][key_name]
+        if value == "":
+            value = "z"
+        new_key = str(value) + key
+        sorted_dic[new_key] = dic[key]
+    return sorted_dic
+ 
 def main(params):
     
     dic_summary = _glob_to_dict(params["wdir"] + "/*/log/summary.*.log")
@@ -320,9 +332,14 @@ def main(params):
             
         info_wmax[ckey] = max(wsize) + 1
     
+    if params["sortby"] == "taskname":
+        sorted_dic = dic_info
+    else:
+        sorted_dic = sort_dic(dic_info, params["sortby"])        
+    
     _print(header_dic, header, info_wmax)
-    for tkey in sorted(dic_info.keys()):
-        _print(dic_info[tkey], header, info_wmax)
+    for tkey in sorted(sorted_dic.keys()):
+        _print(sorted_dic[tkey], header, info_wmax)
         
 def entry_point(args, unknown_args):
     
@@ -346,6 +363,7 @@ def entry_point(args, unknown_args):
         "to_date": begin,
         "from_date": end,
         "max": args.max,
+        "sortby": args.sortby,
     }
     if args.past:
         main_past(params)

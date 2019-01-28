@@ -87,37 +87,47 @@ Role:
 ### 1) Job submit.
 
 ```
-ecsub submit \
-    --script SCRIPT \
-    --tasks TASKS \
-    --aws-s3-bucket AWS_S3_BUCKET
-    [--image IMAGE] \
-    [--aws-ec2-instance-type INSTANCE_TYPE] \
-    [--disk-size DISK_SIZE]
+$ ecsub submit --help
+usage: ecsub submit [-h] [--wdir path/to/dir] [--image docker/image:tag]
+                    [--use_amazon_ecr] [--shell path/to/bash] --script
+                    path/to/script.sh --tasks path/to/tasks.tsv
+                    [--task-name task-name] --aws-s3-bucket s3://output/bucket
+                    [--aws-ec2-instance-type t2.micro]
+                    [--aws-ec2-instance-type-list t3.micro,t2.micro]
+                    [--disk-size 22] [--processes 20] [--memory 8] [--vcpu 1]
+                    [--aws-security-group-id sg-ab123456]
+                    [--aws-key-name key-123ab]
+                    [--aws-subnet-id subnet-123456ab] [--spot] [--retry-od]
 
 optional arguments:
-  --aws-ec2-instance-type INSTANCE_TYPE
-                                  AWS instance type
-  --aws-ec2-instance-type-list INSTANCE_TYPE_LIST 
-                                  [spot] AWS instance types, split with ','
-  --aws-key-name KEY_NAME         Your AWS key pair name
-  --aws-s3-bucket S3_BUCKET       Your AWS S3 bucket
-  --aws-security-group-id SECURITY_GROUP_ID
-                                  Your AWS security_group_id
-  --aws-subnet-id SUBNET_ID       AWS subnet_id
-  --disk-size DISK_SIZE           AWS disk size (GiB)
-  --image IMAGE                   docker image
-  --memory MEMORY                 Memory used by AWS ECS task (MB)
-  --retry-od                      [spot] In case of failure, retry on demand instance
-  --script SCRIPT                 run script
-  --shell SHELL                   path to bash or ash in docker-container
-  --spot                          [spot] use spot instance
-  --task-name TASK_NAME           submit name as AWS ECS cluster name
-  --tasks TASKS                   parameters
-  --use_amazon_ecr                use_amazon_ecr
-  --vcpu VCPU                     vCpu used by AWS ECS task
-  --wdir WDIR                     output temporary data
-  -h, --help                      show this help message and exit
+  -h, --help            show this help message and exit
+  --wdir path/to/dir    output temporary data
+  --image docker/image:tag
+                        docker image
+  --use_amazon_ecr      use_amazon_ecr
+  --shell path/to/bash  path to bash or ash in docker-container
+  --script path/to/script.sh
+                        run script
+  --tasks path/to/tasks.tsv
+                        parameters
+  --task-name task-name
+                        submit name as AWS ECS cluster name
+  --aws-s3-bucket s3://output/bucket
+                        AWS your S3 bucket
+  --aws-ec2-instance-type t2.micro
+                        AWS instance type
+  --aws-ec2-instance-type-list t3.micro,t2.micro
+                        AWS instance types, split with ','
+  --disk-size 22        AWS disk size (GiB)
+  --processes 20        maximum multi processes
+  --aws-security-group-id sg-ab123456
+                        AWS your security_group_id
+  --aws-key-name key-123ab
+                        AWS your key pair name
+  --aws-subnet-id subnet-123456ab
+                        AWS subnet_id
+  --spot                [spot] use spot instance
+  --retry-od            [spot] In case of failure, retry on demand instance
 ```
 
 For example,
@@ -138,23 +148,39 @@ ecsub submit \
 ### 2) View job report.
 
 ```Bash
-ecsub report \
-    [--wdir WDIR]
+$ ecsub report --help
+usage: ecsub report [-h] [--wdir path/to/dir] [--past] [-f]
+                    [-b [YYYYMMDDhhmm]] [-e [YYYYMMDDhhmm]] [--max 20]
+                    [--sortby sort_key]
 
 optional arguments:
-  --wdir WDIR      {PATH} when 'ecsub submit --wdir {PATH}' (default: "./")
+  -h, --help            show this help message and exit
+  --wdir path/to/dir    {PATH} when 'ecsub submit --wdir {PATH}'
+  --past                display summary in previous version.
+  -f, --failed          display failed or abnoraml exit status job only.
+  -b [YYYYMMDDhhmm], --begin [YYYYMMDDhhmm]
+                        The earliest createdAt time for jobs to be summarized,
+                        in the format [YYYYMMDDhhmm]
+  -e [YYYYMMDDhhmm], --end [YYYYMMDDhhmm]
+                        The latest createdAt time for jobs to be summarized,
+                        in the format [YYYYMMDDhhmm]
+  --max 20              Maximum display count
+  --sortby sort_key     Sort summary key
 ```
 
 For example,
 
 ```Bash
-ecsub report --wdir /tmp/ecsub/
+ecsub report --wdir /tmp/ecsub -b 201901250000 --max 5
 ```
 
 <pre>
-|exitCode|                  taskname|no|cpu|memory|instance_type|disk_size|              createdAt|              stoppedAt|                                                  log_local|
-|       0|tasks-wordcount-7gqRu_task| 0|  1|   800|     t2.micro|       22|2018/04/02 02:43:26 UTC|2018/04/02 02:44:08 UTC|/tmp/ecsub/tasks-wordcount-7gqRu/log/describe-tasks.000.log|
-|     127|tasks-wordcount-Kn8UW_task| 0|  1|   800|     t2.micro|       22|2018/04/02 02:38:28 UTC|2018/04/02 02:38:37 UTC|/tmp/ecsub/tasks-wordcount-Kn8UW/log/describe-tasks.000.log|
+| exitCode| taskname|  no| Spot|          job_startAt|            job_endAt| instance_type| cpu| memory| disk_size|    instance_createAt|      instance_stopAt|                                       log_local|
+|        0|  sample1| 000|    F| 2019/01/25 18:07:40 | 2019/01/25 18:13:46 |      t2.micro|   1|    900|         1| 2019/01/25 18:07:40 | 2019/01/25 18:13:46 | /tmp/ecsub/sample1/log/describe-tasks.000.0.log|
+|      255|  sample2| 000|    F| 2019/01/25 16:42:00 | 2019/01/25 16:46:33 |      t2.micro|   1|    800|         1| 2019/01/25 16:42:00 | 2019/01/25 16:46:33 | /tmp/ecsub/sample2/log/describe-tasks.000.0.log|
+|       NA|  sample3| 000|    F| 2019/01/25 17:14:58 |                     |              |    |       |         1| 2019/01/25 17:14:58 |                     |                                                |
+|        0|  sample4| 000|    F| 2019/01/25 22:06:30 | 2019/01/25 22:20:24 |    i2.8xlarge|  32| 245900|         1| 2019/01/25 22:06:30 | 2019/01/25 22:20:24 | /tmp/ecsub/sample4/log/describe-tasks.000.0.log|
+|        1|  sample5| 000|    F| 2019/01/26 07:20:48 | 2019/01/26 07:20:48 |    x1e.xlarge|   0|      0|         1| 2019/01/26 07:20:48 | 2019/01/26 07:20:48 |                                                |
 </pre>
 
 ### 3) Download log files
@@ -163,22 +189,49 @@ ecsub creates logs on AWS CloudWatch.
 If you need, you can download log-files to local directory, and remove log-streams from AWS.
 
 ```
-ecsub logs \
-    [--wdir WDIR] \
-    [--prefix PREFIX] \
-    [--remove]
+$ ecsub logs --help
+usage: ecsub logs [-h] [--wdir path/to/dir] [--prefix task-name] [--rm] [--dw]
 
 optional arguments:
-  --wdir WDIR      {PATH} when 'ecsub submit --wdir {PATH}' (default: "./")
-  --prefix PREFIX  prefix of LogGroupName in AWS CloudWatch (default: "ecsub")
-  --dw         flag for download from AWS (default: False)
-  --rm         flag for remove from AWS (default: False)
+  -h, --help          show this help message and exit
+  --wdir path/to/dir  {PATH} when 'ecsub submit --wdir {PATH}'
+  --prefix task-name  prefix of LogGroupName in AWS CloudWatch
+  --rm                flag for remove from AWS
+  --dw                flag for download from AWS
 ```
 
 For example,
 
 ```Bash
 ecsub logs --wdir /tmp/ecsub --prefix tasks-wordcount --dw
+```
+
+### 4) Delete jobs.
+
+**Attention!** If task ends normally (exit with 0, 1, 255...), it does not need to be executed.  
+`delete` subcommand is used for jobs that have a creation date ("instance_createAt") but no end date ("instance_stopAt") as shown below.
+
+<pre>
+| exitCode| taskname|  no| ... |    instance_createAt| instance_stopAt| log_local|
+|       NA|  sample3| 000| ... | 2019/01/25 17:14:58 |                |          |
+</pre>
+
+```Bash
+$ ecsub delete --help
+usage: ecsub delete [-h] [--wdir path/to/dir] task-name
+
+positional arguments:
+  task-name           task name
+
+optional arguments:
+  -h, --help          show this help message and exit
+  --wdir path/to/dir  {PATH} when 'ecsub submit --wdir {PATH}'
+```
+
+For example,
+
+```Bash
+ecsub delete --wdir /tmp/ecsub sample2-bRnfG
 ```
 
 ## 5. Documentation
