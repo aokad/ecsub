@@ -147,7 +147,7 @@ ecsub submit \
 
 ### 2) View job report.
 
-```Bash
+```
 $ ecsub report --help
 usage: ecsub report [-h] [--wdir path/to/dir] [--past] [-f]
                     [-b [YYYYMMDDhhmm]] [-e [YYYYMMDDhhmm]] [--max 20]
@@ -216,7 +216,7 @@ ecsub logs --wdir /tmp/ecsub --prefix tasks-wordcount --dw
 |       NA|  sample3| 000| ... | 2019/01/25 17:14:58 |                |          |
 </pre>
 
-```Bash
+```
 $ ecsub delete --help
 usage: ecsub delete [-h] [--wdir path/to/dir] task-name
 

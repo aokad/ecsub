@@ -25,8 +25,6 @@ def main(params):
     params["aws_security_group_id"] = summary["SecurityGroupId"]
     params["cluster_name"] = summary["ClusterName"]
     params["shell"]  = summary["Shell"]
-    params["aws_ecs_task_vcpu"]  = summary["EcsTaskVcpu"]
-    params["aws_ecs_task_memory"] = summary["EcsTaskMemory"]
     params["aws_ec2_instance_disk_size"] = summary["Ec2InstanceDiskSize"]
     params["image"] = summary["Image"]
     params["use_amazon_ecr"] = summary["UseAmazonEcr"]
