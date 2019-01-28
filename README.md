@@ -94,7 +94,7 @@ usage: ecsub submit [-h] [--wdir path/to/dir] [--image docker/image:tag]
                     [--task-name task-name] --aws-s3-bucket s3://output/bucket
                     [--aws-ec2-instance-type t2.micro]
                     [--aws-ec2-instance-type-list t3.micro,t2.micro]
-                    [--disk-size 22] [--processes 20] [--memory 8] [--vcpu 1]
+                    [--disk-size 22] [--processes 20]
                     [--aws-security-group-id sg-ab123456]
                     [--aws-key-name key-123ab]
                     [--aws-subnet-id subnet-123456ab] [--spot] [--retry-od]
