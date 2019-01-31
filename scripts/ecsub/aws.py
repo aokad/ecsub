@@ -52,6 +52,8 @@ class Aws_ecsub_control:
         self.s3_runsh = ""
         self.s3_script = ""
         self.s3_setenv = []
+        self.request_payer = []
+        self.request_payer.extend(params["request_payer"])
         
         self.spot = params["spot"]
         self.retry_od = params["retry_od"]
@@ -102,17 +104,22 @@ class Aws_ecsub_control:
         
         return True
     
-    def check_file(self, path, no):
+    def check_file(self, path, no = None):
         
         print(ecsub.tools.info_message (self.cluster_name, no, "check s3-path '%s'..." % (path)))
-        cmd_template = "aws s3 ls {path}"
-        cmd = cmd_template.format(set_cmd = self.set_cmd, path = path)
+        
+        option = ""
+        if ecsub.tools.is_request_payer_bucket(path, self.request_payer):
+            option = "--request-payer requester"
+            
+        cmd_template = "{set_cmd}; aws s3 ls {option} {path}"
+        cmd = cmd_template.format(set_cmd = self.set_cmd, path = path, option = option)
         response = self._subprocess_communicate(cmd)
-
+    
         if response == "":
             print(ecsub.tools.error_message (self.cluster_name, no, "s3-path '%s' is invalid." % (path)))
             return False
-
+    
         find = False
         for r in response.split("\n"):
             if r.split(" ")[-1].rstrip("/") == os.path.basename(path):
@@ -163,17 +170,23 @@ class Aws_ecsub_control:
     
     def s3_copy(self, src, dst, recursive, no = None):
 
-        cmd_template = "{set_cmd}; aws s3 cp --only-show-errors {r_option} {file1} {file2}"
+        cmd_template = "{set_cmd}; aws s3 cp --only-show-errors {option} {file1} {file2}"
 
-        r_option = ""
+        option = ""
         if recursive:
-            r_option = "--recursive"
+            option = "--recursive"
 
+        if ecsub.tools.is_request_payer_bucket(src, self.request_payer) or \
+           ecsub.tools.is_request_payer_bucket(dst, self.request_payer) :
+            if option != "":
+                option += " "
+            option += "--request-payer requester"
+            
         cmd = cmd_template.format(
             set_cmd = self.set_cmd,
             file1 = src,
             file2 = dst,
-            r_option = r_option
+            option = option
         )
         self._subprocess_call(cmd, no)
         return True
@@ -310,6 +323,9 @@ class Aws_ecsub_control:
 
         #print(ecsub.tools.info_message (self.cluster_name, None, "EcsTaskRole: %s" % (ECSTASKROLE)))
         #print(ecsub.tools.info_message (self.cluster_name, None, "DockerImage: %s" % (IMAGE_ARN)))
+        option = ""
+        if ecsub.tools.is_request_payer_bucket(self.s3_runsh, self.request_payer):
+            option = "--request-payer requester "
             
         containerDefinitions = {
             "containerDefinitions": [
@@ -324,7 +340,7 @@ class Aws_ecsub_control:
                           "-c"
                       ],
                       "command": [
-                          "apt update; apt install -y python-pip; pip install awscli --upgrade; aws configure list; aws s3 cp " + self.s3_runsh + " /exec.sh; " + self.shell + " /exec.sh"
+                          "apt update; apt install -y python-pip; pip install awscli --upgrade; aws configure list; aws s3 cp " + option + self.s3_runsh + " /exec.sh; " + self.shell + " /exec.sh"
                       ],
                       "environment": [
                           {

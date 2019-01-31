@@ -92,6 +92,14 @@ def datetime_to_isoformat(dt):
 def datetime_to_standardformat(dt):
     return dt.strftime("%Y/%m/%d %H:%M:%S %Z")
 
+def is_request_payer_bucket(path, payer_buckets):
+
+    bucket = path.replace("s3://", "").split("/")[0]
+    
+    if payer_buckets.count(bucket) > 0:
+        return True
+    return False
+
 def main():
     pass
 
