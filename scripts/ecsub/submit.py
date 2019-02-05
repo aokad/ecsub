@@ -19,7 +19,7 @@ import ecsub.aws_config
 import ecsub.tools
 import ecsub.metrics
 
-def read_tasksfile(tasks_file, cluster_name, request_payer):
+def read_tasksfile(tasks_file, cluster_name):
     
     tasks = []
     header = []
@@ -32,144 +32,124 @@ def read_tasksfile(tasks_file, cluster_name, request_payer):
                     header.append({"type": "", "recursive": False, "name": ""})
                 
                 elif v[0].lower() == "--env":
-                    header.append({"type": "env", "recursive": False, "request_payer": False, "name": v[-1]})
+                    header.append({"type": "env", "recursive": False, "name": v[-1]})
                 elif v[0].lower() == "--input-recursive":
-                    header.append({"type": "input", "recursive": True, "request_payer": ecsub.tools.is_request_payer_bucket(v[-1], request_payer), "name": v[-1]})
+                    header.append({"type": "input", "recursive": True, "name": v[-1]})
                 elif v[0].lower() == "--input":
-                    header.append({"type": "input", "recursive": False, "request_payer": ecsub.tools.is_request_payer_bucket(v[-1], request_payer), "name": v[-1]})
+                    header.append({"type": "input", "recursive": False, "name": v[-1]})
                 elif v[0].lower() == "--output-recursive":
-                    header.append({"type": "output", "recursive": True, "request_payer": ecsub.tools.is_request_payer_bucket(v[-1], request_payer), "name": v[-1]})
+                    header.append({"type": "output", "recursive": True, "name": v[-1]})
                 elif v[0].lower() == "--output":
-                    header.append({"type": "output", "recursive": False, "request_payer": ecsub.tools.is_request_payer_bucket(v[-1], request_payer), "name": v[-1]})
+                    header.append({"type": "output", "recursive": False, "name": v[-1]})
                 else:
                     print (ecsub.tools.error_message (cluster_name, None, "type %s is not support." % (v[0])))
                     return None
             continue
         
-        tasks.append(line.rstrip("\r\n").split("\t"))
+        items = line.rstrip("\r\n").split("\t")
+        for i in range(len(items)):
+            if header[i]["type"] in ["input", "output"]:
+                if items[i] == "":
+                    continue
+                
+                if not items[i].startswith("s3://"):
+                    print (ecsub.tools.error_message(cluster_name, None, "'%s' is invalid S3 path." % (items[i])))
+                    return None
+            
+        tasks.append(items)
 
     return {"tasks": tasks, "header": header}
 
 
-def write_runsh(task_params, runsh, shell, request_payer):
+def write_runsh(task_params, runsh, shell, is_request_payer):
    
     run_template = """set -ex
 pwd
 
-SCRIPT_ENVM_NAME=`basename ${{SCRIPT_ENVM_PATH}}`
-SCRIPT_EXEC_NAME=`basename ${{SCRIPT_EXEC_PATH}}`
+SCRIPT_SETENV_NAME=`basename ${{SCRIPT_SETENV_PATH}}`
+SCRIPT_RUN_NAME=`basename ${{SCRIPT_RUN_PATH}}`
+SCRIPT_DOWNLOADER_NAME=`basename ${{SCRIPT_DOWNLOADER_PATH}}`
+SCRIPT_UPLOADER_NAME=`basename ${{SCRIPT_UPLOADER_PATH}}`
 
-aws s3 cp {option} ${{SCRIPT_ENVM_PATH}} ${{SCRIPT_ENVM_NAME}} --only-show-errors
-aws s3 cp {option} ${{SCRIPT_EXEC_PATH}} ${{SCRIPT_EXEC_NAME}} --only-show-errors
+aws s3 cp {option} ${{SCRIPT_SETENV_PATH}} ${{SCRIPT_SETENV_NAME}} --only-show-errors
+aws s3 cp {option} ${{SCRIPT_RUN_PATH}} ${{SCRIPT_RUN_NAME}} --only-show-errors
+aws s3 cp {option} ${{SCRIPT_DOWNLOADER_PATH}} ${{SCRIPT_DOWNLOADER_NAME}} --only-show-errors
+aws s3 cp {option} ${{SCRIPT_UPLOADER_PATH}} ${{SCRIPT_UPLOADER_NAME}} --only-show-errors
 
-source ${{SCRIPT_ENVM_NAME}}
+source ${{SCRIPT_SETENV_NAME}}
 df -h
 
-{download_script}
+{shell} ${{SCRIPT_DOWNLOADER_NAME}}
 
-# exec
-{shell} ${{SCRIPT_EXEC_NAME}}
+# run main script
+{shell} ${{SCRIPT_RUN_NAME}}
 
 #if [ $? -gt 0 ]; then exit $?; fi
 
 # upload
-{upload_script}
+{shell} ${{SCRIPT_UPLOADER_NAME}}
 """
-
-    dw_text = ""
-    up_text = ""    
-    for i in range(len(task_params["header"])):
-
-        if task_params["header"][i]["type"] == "input":
-            cmd_template = 'if test -n "${name}"; then aws s3 cp --only-show-errors {option} $S3_{name} ${name}; fi\n'
-            
-            option = []
-            if task_params["header"][i]["recursive"]:
-                option.append("--recursive")
-            
-            if task_params["header"][i]["request_payer"]:
-                option.append("--request-payer requester")
-                
-            dw_text += cmd_template.format(
-                option = " ".join(option),
-                name = task_params["header"][i]["name"])
-            
-        elif task_params["header"][i]["type"] == "output":
-            cmd_template = 'if test -n "${name}"; then aws s3 cp --only-show-errors {option} ${name} $S3_{name}; fi\n'
-            
-            option = []
-            if task_params["header"][i]["recursive"]:
-                option.append("--recursive")
-            
-            if task_params["header"][i]["request_payer"]:
-                option.append("--request-payer requester")
-                
-            up_text += cmd_template.format(
-                option = " ".join(option),
-                name = task_params["header"][i]["name"])
-    
     option = ""
-    if request_payer:
+    if is_request_payer:
         option = "--request-payer requester"
         
     open(runsh, "w").write(run_template.format(
         shell = shell,
-        option = option,
-        download_script = dw_text,
-        upload_script = up_text
+        option = option
     ))
     
-def write_setenv(task_params, setenv, no):
+def write_s3_scripts(task_params, payer_buckets, setenv, downloader, uploader, no):
    
-    f = open(setenv, "w")
+    env_text = ""
+    dw_text = ""
+    up_text = ""
     
     for i in range(len(task_params["tasks"][no])):
         
-        if task_params["header"][i]["type"] == "input":
-            f.write('export S3_%s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i]))
-            f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i].replace("s3://", "/scratch/AWS_DATA/")))
-        elif task_params["header"][i]["type"] == "output":
-            f.write('export S3_%s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i]))
-            f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i].replace("s3://", "/scratch/AWS_DATA/")))
-        elif task_params["header"][i]["type"] == "env":
-            f.write('export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i]))
+        if task_params["header"][i]["type"] == "env":
+            env_text += 'export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i])
+            continue
             
-    f.close()
-
-def check_inputfiles_collect(task_params, cluster_name):
-
-    files = []
-    dirs = []
-    for task in task_params["tasks"]:
-        for i in range(len(task)):
-            if task_params["header"][i]["type"] != "input":
-                continue
-            
-            if task_params["header"][i]["request_payer"]:
-                continue
-            
-            path = task[i].replace("s3://", "", 1).strip("/").rstrip("/")
-            if path == "":
-                continue
-            
-            if task_params["header"][i]["recursive"]:
-                dirs.append(path)
-            else:
-                files.append(path)
+        s3_path = task_params["tasks"][no][i]
+        scratch_path = task_params["tasks"][no][i].replace("s3://", "/scratch/AWS_DATA/")
     
-    file_list = sorted(list(set(files)))
-    dir_list = sorted(list(set(dirs)))
+        env_text += 'export S3_%s="%s"\n' % (task_params["header"][i]["name"], s3_path)
+        env_text += 'export %s="%s"\n' % (task_params["header"][i]["name"], scratch_path)
+    
+        if s3_path == "":
+            continue
+        
+        cmd_template = 'aws s3 cp --only-show-errors {option} {path1} {path2}\n'
+        
+        option = []
+        if task_params["header"][i]["recursive"]:
+            option.append("--recursive")
+        
+        if ecsub.tools.is_request_payer_bucket(s3_path, payer_buckets):
+            option.append("--request-payer requester")
+        
+        if task_params["header"][i]["type"] == "input":
+            dw_text += cmd_template.format(option = " ".join(option), path1 = s3_path, path2 = scratch_path)
+            
+        elif task_params["header"][i]["type"] == "output":
+            up_text += cmd_template.format(option = " ".join(option), path1 = scratch_path, path2 = s3_path)
+
+    open(setenv, "w").write(env_text)
+    open(downloader, "w").write(dw_text)
+    open(uploader, "w").write(up_text)
+    
+def check_inputfiles_collect(files, dirs, cluster_name):
     
     uncheck_dirs = []
-    uncheck_dirs.extend(dir_list)
-    for d in dir_list:
-        for f in file_list:
+    uncheck_dirs.extend(dirs)
+    for d in dirs:
+        for f in files:
             if f.startswith(d):
                 uncheck_dirs.remove(d)
                 break
 
     tree = {}
-    for path in file_list:
+    for path in files:
         bucket = path.split("/")[0]
         if not bucket in tree:
             tree[bucket] = {}
@@ -198,7 +178,7 @@ def check_inputfiles_collect(task_params, cluster_name):
                 tree[key]["dirs"].remove(d)
             if len(tree[key]["files"]) == 0 and len(tree[key]["dirs"]) == 0:
                 break
-            
+
     result = []
     for key in tree:
         for typ in tree[key]:
@@ -206,58 +186,75 @@ def check_inputfiles_collect(task_params, cluster_name):
                 result.append("%s/%s" % (key, path))
     
     return result
-
-
     
-def check_inputfiles_partial(aws_instance, task_params):
+def check_inputfiles_partial(aws_instance, files, dirs):
+        
+    for path in files + dirs:
+        if not aws_instance.check_file(path):
+            return [path]
+
+    return []
+
+def check_inputfiles(aws_instance, task_params, cluster_name, payer_buckets):
     
     files = []
     dirs = []
+    files_rp = []
+    dirs_rp = []
     for task in task_params["tasks"]:
         for i in range(len(task)):
             if task_params["header"][i]["type"] != "input":
-                continue
-            
-            if not task_params["header"][i]["request_payer"]:
                 continue
             
             path = task[i].replace("s3://", "", 1).strip("/").rstrip("/")
             if path == "":
                 continue
             
-            if task_params["header"][i]["recursive"]:
-                dirs.append(path)
+            if ecsub.tools.is_request_payer_bucket(task[i], payer_buckets):
+                if task_params["header"][i]["recursive"]:
+                    dirs_rp.append(path)
+                else:
+                    files_rp.append(path)
             else:
-                files.append(path)
+                if task_params["header"][i]["recursive"]:
+                    dirs.append(path)
+                else:
+                    files.append(path)
+                    
+    invalid_files = []
+    invalid_files += check_inputfiles_collect(sorted(list(set(files))), sorted(list(set(dirs))), cluster_name)
+    invalid_files += check_inputfiles_partial(aws_instance, sorted(list(set(files_rp))), sorted(list(set(dirs_rp))))
     
-    file_list = sorted(list(set(files)))
-    dir_list = sorted(list(set(dirs)))
-    
-    for path in file_list + dir_list:
-        if not aws_instance.check_file(path):
-            return False
+    return invalid_files
 
-    return True
-    
 def upload_scripts(task_params, aws_instance, local_root, s3_root, script, cluster_name, shell, request_payer):
 
     runsh = local_root + "/run.sh"
     s3_runsh = s3_root + "/run.sh"
     write_runsh(task_params, runsh, shell, ecsub.tools.is_request_payer_bucket(s3_root, request_payer))
-
+    
     s3_setenv_list = []
+    s3_downloader_list = []
+    s3_uploader_list = []
     for i in range(len(task_params["tasks"])):
         setenv = local_root + "/setenv.%d.sh" % (i)
         s3_setenv = s3_root + "/setenv.%d.sh" % (i)
-        write_setenv(task_params, setenv, i)
+        downloader = local_root + "/downloader.%d.sh" % (i)
+        s3_downloader = s3_root + "/downloader.%d.sh" % (i)
+        uploader = local_root + "/uploader.%d.sh" % (i)
+        s3_uploader = s3_root + "/uploader.%d.sh" % (i)
+        
+        write_s3_scripts(task_params, request_payer, setenv, downloader, uploader, i)
         s3_setenv_list.append(s3_setenv)
+        s3_downloader_list.append(s3_downloader)
+        s3_uploader_list.append(s3_uploader)
         
     aws_instance.s3_copy(local_root, s3_root, True)
     
     s3_script = s3_root + "/" + os.path.basename(script)
     aws_instance.s3_copy(script, s3_script, False)
     
-    aws_instance.set_s3files(s3_runsh, s3_script, s3_setenv_list)
+    aws_instance.set_s3files(s3_runsh, s3_script, s3_setenv_list, s3_downloader_list, s3_uploader_list)
     
     return True
 
@@ -307,7 +304,9 @@ def submit_task_spot(aws_instance, no):
     task_log = None
     
     for itype in aws_instance.aws_ec2_instance_type_list:
+        
         aws_instance.task_param[no]["aws_ec2_instance_type"] = itype
+        
         if not aws_instance.set_ondemand_price(no):
             continue
         if not aws_instance.set_spot_price(no):
@@ -415,7 +414,6 @@ def submit_task(aws_instance, no, task_params, spot):
         "Jobs":[]
     }
     _save_summary_file(job_summary, False)
-    
     try:
         if spot:
             start_t = datetime.datetime.now()
@@ -461,7 +459,7 @@ def main(params):
     # check param
     instance_type_list = params["aws_ec2_instance_type_list"].replace(" ", "")
     if len(instance_type_list) == 0:
-        params["aws_ec2_instance_type_list"] = []
+        params["aws_ec2_instance_type_list"] = [params["aws_ec2_instance_type"]]
     else:
         params["aws_ec2_instance_type_list"] = instance_type_list.split(",")
         
@@ -485,11 +483,13 @@ def main(params):
         params["request_payer"] = request_payer.split(",")
         
     # read tasks file
-    task_params = read_tasksfile(params["tasks"], params["cluster_name"], params["request_payer"])
+    task_params = read_tasksfile(params["tasks"], params["cluster_name"])
     if task_params == None:
+        #print (ecsub.tools.error_message (params["cluster_name"], None, "task file is invalid."))
         return 1
     
     if task_params["tasks"] == []:
+        print (ecsub.tools.info_message (params["cluster_name"], None, "task file is empty."))
         return 0
     
     subdir = params["cluster_name"]
@@ -513,13 +513,10 @@ def main(params):
         return 1
 
     # check s3-files path
-    result = check_inputfiles_collect(task_params, params["cluster_name"])
-    for r in result:
-        print (ecsub.tools.error_message (params["cluster_name"], None, "input '%s' is not exist." % (r)))
-    if len(result)> 0:
-        return 1
-    
-    if check_inputfiles_partial(aws_instance, task_params):
+    invalid_pathes = check_inputfiles(aws_instance, task_params, params["cluster_name"], params["request_payer"])
+    for r in invalid_pathes:
+        print (ecsub.tools.error_message (params["cluster_name"], None, "input '%s' is not access." % (r)))
+    if len(invalid_pathes)> 0:
         return 1
     
     # write task-scripts, and upload to S3

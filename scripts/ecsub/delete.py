@@ -14,7 +14,7 @@ def main(params):
     params["wdir"] =  params["wdir"].rstrip("/")
     summary_list = glob.glob("%s/%s/log/summary.*.log" % (params["wdir"], params["task_name"]))
     if len(summary_list) == 0:
-        print (ecsub.tools.error_message (params["task_name"], None, "task-name %s is not find in directory %s." % (params["wdir"], params["task_name"])))
+        print (ecsub.tools.error_message (params["task_name"], None, "task-name %s is not find in directory %s." % (params["task_name"], params["wdir"])))
         return 1
     
     params["wdir"] =  "%s/%s" % (params["wdir"].rstrip("/"), params["task_name"])
@@ -30,11 +30,13 @@ def main(params):
     params["use_amazon_ecr"] = summary["UseAmazonEcr"]
     params["spot"] = summary["Spot"]
     
+    # no use
     params["aws_ec2_instance_type_list"] = ['']
     params["aws_ec2_instance_type"] = ""
     params["aws_subnet_id"] = ""
     params["retry_od"] = False
-        
+    params["request_payer"] = []
+    
     aws_instance = ecsub.aws.Aws_ecsub_control(params, 1)
     aws_instance.aws_key_auto = summary["AutoKey"]
     aws_instance.cluster_arn = summary["ClusterArn"]

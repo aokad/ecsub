@@ -52,6 +52,8 @@ class Aws_ecsub_control:
         self.s3_runsh = ""
         self.s3_script = ""
         self.s3_setenv = []
+        self.s3_downloader = []
+        self.s3_uploader = []
         self.request_payer = []
         self.request_payer.extend(params["request_payer"])
         
@@ -191,11 +193,13 @@ class Aws_ecsub_control:
         self._subprocess_call(cmd, no)
         return True
 
-    def set_s3files(self, s3_runsh, s3_script, s3_setenv):
+    def set_s3files(self, s3_runsh, s3_script, s3_setenv, s3_downloader, s3_uploader):
         self.s3_runsh = s3_runsh
         self.s3_script = s3_script
         self.s3_setenv.extend(s3_setenv)
-
+        self.s3_downloader.extend(s3_downloader)
+        self.s3_uploader.extend(s3_uploader)
+        
     def _log_path (self, name):
         
         i = 0
@@ -340,15 +344,23 @@ class Aws_ecsub_control:
                           "-c"
                       ],
                       "command": [
-                          "apt update; apt install -y python-pip; pip install awscli --upgrade; aws configure list; aws s3 cp " + option + self.s3_runsh + " /exec.sh; " + self.shell + " /exec.sh"
+                          "apt update; apt install -y python-pip; pip install awscli --upgrade; aws configure list; aws s3 cp " + option + self.s3_runsh + " /run.sh; " + self.shell + " /run.sh"
                       ],
                       "environment": [
                           {
-                              "name": "SCRIPT_EXEC_PATH",
+                              "name": "SCRIPT_RUN_PATH",
                               "value": self.s3_script
                           },
                           {
-                              "name": "SCRIPT_ENVM_PATH",
+                              "name": "SCRIPT_SETENV_PATH",
+                              "value": ""
+                          },
+                          {
+                              "name": "SCRIPT_DOWNLOADER_PATH",
+                              "value": ""
+                          },
+                          {
+                              "name": "SCRIPT_UPLOADER_PATH",
                               "value": ""
                           }
                       ],
@@ -860,8 +872,16 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                     "name": self.cluster_name + "_task",
                     "environment": [
                         {
-                            "name": "SCRIPT_ENVM_PATH",
+                            "name": "SCRIPT_SETENV_PATH",
                             "value": self.s3_setenv[no]
+                        },
+                        {
+                            "name": "SCRIPT_DOWNLOADER_PATH",
+                            "value": self.s3_downloader[no]
+                        },
+                        {
+                            "name": "SCRIPT_UPLOADER_PATH",
+                            "value": self.s3_uploader[no]
                         }
                     ]
             }]

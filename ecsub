@@ -98,4 +98,5 @@ def main():
     return known_args.func(known_args, unknown_args)
     
 if __name__ == "__main__":
+    print (">>> " + " ".join(sys.argv))
     sys.exit(main())
