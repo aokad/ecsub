@@ -22,7 +22,7 @@ class DailyTest(unittest.TestCase):
     @classmethod
     def setUpClass(self):
         self.WDIR = "/tmp/ecsub"
-        self.BEFORE = glob.glob(cls.WDIR + "/*")
+        self.BEFORE = glob.glob(self.WDIR + "/*")
         self.START = datetime.datetime.now().strftime("%Y%m%d%H%M")
     
     # terminated class
