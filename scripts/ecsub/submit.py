@@ -25,8 +25,11 @@ def read_tasksfile(tasks_file, cluster_name):
     header = []
 
     for line in open(tasks_file).readlines():
+        text = line.rstrip("\r\n")
+        if text == "":
+            continue
         if header == []:
-            for item in line.rstrip("\r\n").split("\t"):
+            for item in text.split("\t"):
                 v = item.strip(" ").split(" ")
                 if v[0] == "":
                     header.append({"type": "", "recursive": False, "name": ""})
@@ -46,12 +49,11 @@ def read_tasksfile(tasks_file, cluster_name):
                     return None
             continue
         
-        items = line.rstrip("\r\n").split("\t")
+        items = text.split("\t")
         for i in range(len(items)):
             if header[i]["type"] in ["input", "output"]:
                 if items[i] == "":
                     continue
-                
                 if not items[i].startswith("s3://"):
                     print (ecsub.tools.error_message(cluster_name, None, "'%s' is invalid S3 path." % (items[i])))
                     return None
@@ -450,6 +452,15 @@ def loop_process(aws_instance, params, task_params):
     process_list = []
     
     try:
+        # create-cluster
+        # and register-task-definition
+        if not aws_instance.create_cluster():
+            aws_instance.clean_up()
+            return 1
+        if not aws_instance.register_task_definition():
+            aws_instance.clean_up()
+            return 1
+        
         while len(process_list) < len(data):
             alives = 0
             for process in process_list:
@@ -587,12 +598,7 @@ def main(params):
                    params["shell"],
                    params["request_payer"])
 
-        # create-cluster
-        # and register-task-definition
-    if aws_instance.create_cluster() and aws_instance.register_task_definition():
-        return loop_process(aws_instance, params, task_params)
-    
-    return 1
+    return loop_process(aws_instance, params, task_params)
     
 def entry_point(args, unknown_args):
     
