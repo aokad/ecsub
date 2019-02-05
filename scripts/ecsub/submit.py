@@ -414,39 +414,95 @@ def submit_task(aws_instance, no, task_params, spot):
         "Jobs":[]
     }
     _save_summary_file(job_summary, False)
-    try:
-        if spot:
+
+    if spot:
+        start_t = datetime.datetime.now()
+        (exit_code, task_log, retry) = submit_task_spot(aws_instance, no)
+        job_summary["Jobs"].append(_set_job_info(
+            aws_instance.task_param[no], start_t, datetime.datetime.now(), task_log, exit_code
+        ))
+        
+        if aws_instance.retry_od and retry:
             start_t = datetime.datetime.now()
-            (exit_code, task_log, retry) = submit_task_spot(aws_instance, no)
-            job_summary["Jobs"].append(_set_job_info(
-                aws_instance.task_param[no], start_t, datetime.datetime.now(), task_log, exit_code
-            ))
-            
-            if aws_instance.retry_od and retry:
-                start_t = datetime.datetime.now()
-                aws_instance.task_param[no]["aws_ec2_instance_type"] = aws_instance.aws_ec2_instance_type_list[0]
-                (exit_code, task_log) = submit_task_ondemand(aws_instance, no)
-                job_summary["Jobs"].append(_set_job_info(
-                    aws_instance.task_param[no], start_t, datetime.datetime.now(), task_log, exit_code
-                ))
-        else:
-            start_t = datetime.datetime.now()
+            aws_instance.task_param[no]["aws_ec2_instance_type"] = aws_instance.aws_ec2_instance_type_list[0]
             (exit_code, task_log) = submit_task_ondemand(aws_instance, no)
             job_summary["Jobs"].append(_set_job_info(
                 aws_instance.task_param[no], start_t, datetime.datetime.now(), task_log, exit_code
             ))
+    else:
+        start_t = datetime.datetime.now()
+        (exit_code, task_log) = submit_task_ondemand(aws_instance, no)
+        job_summary["Jobs"].append(_set_job_info(
+            aws_instance.task_param[no], start_t, datetime.datetime.now(), task_log, exit_code
+        ))
+    
+    job_summary["SubnetId"] = aws_instance.aws_subnet_id
+    job_summary["End"] = ecsub.tools.datetime_to_standardformat(datetime.datetime.now())
+    ecsub.metrics.entry_point(aws_instance.wdir, no)
+
+    _save_summary_file(job_summary, True)
+    exit (exit_code)
+
+def loop_process(aws_instance, params, task_params):
+    
+    max_all_jobs = params["processes"]
+    data = task_params["tasks"]
+    process_list = []
+    
+    try:
+        while len(process_list) < len(data):
+            alives = 0
+            for process in process_list:
+                if process.exitcode == None:
+                   alives += 1
+                    
+            jobs = max_all_jobs - alives
+            submitted = len(process_list)
+            
+            for i in range(jobs):
+                no = i + submitted
+                if no >= len(data):
+                    break
+                    
+                process = multiprocessing.Process(
+                        target = submit_task, 
+                        name = "%s_%03d" % (params["cluster_name"], no), 
+                        args = ((aws_instance, no, task_params, params["spot"]))
+                )
+                process.daemon == True
+                process.start()
+                
+                process_list.append(process)
+                
+                time.sleep(5)
+            
+            time.sleep(5)
         
-        job_summary["SubnetId"] = aws_instance.aws_subnet_id
-        job_summary["End"] = ecsub.tools.datetime_to_standardformat(datetime.datetime.now())
-        ecsub.metrics.entry_point(aws_instance.wdir, no)
-
-        _save_summary_file(job_summary, True)
-        return exit_code
-
+        exitcodes = []
+        for process in process_list:
+            process.join()
+            if process.exitcode != None:
+                exitcodes.append(process.exitcode)
+        
+        aws_instance.clean_up()
+        # SUCCESS?
+        if [0] == list(set(exitcodes)):
+            return 0
+        
+    except Exception as e:
+        print (e)
+        
+        for process in process_list:
+            process.terminate()
+                
+        aws_instance.clean_up()
+        
     except KeyboardInterrupt:
-        pass
+        print ("KeyboardInterrupt")
+        aws_instance.clean_up()
+    
     return 1
-
+    
 def main(params):
     
     # set cluster_name
@@ -531,43 +587,10 @@ def main(params):
                    params["shell"],
                    params["request_payer"])
 
-    pool = None
-    try:
         # create-cluster
         # and register-task-definition
-        if aws_instance.create_cluster() and aws_instance.register_task_definition():
-            
-            # run instance and submit task
-            async_result = []
-            pool = multiprocessing.Pool(processes = params["processes"])
-
-            for i in range(len(task_params["tasks"])):
-                async_result.append(pool.apply_async(submit_task, args=(aws_instance, i, task_params, params["spot"])))
-                time.sleep(5)
-            pool.close() 
-            pool.join()
-            
-            aws_instance.clean_up()
-            
-            # success ?
-            for result in async_result:
-                if result.get() != 0:
-                    return 1
-            return 0
-        
-        else:
-            aws_instance.clean_up()
-        
-    except Exception as e:
-        print (ecsub.tools.error_message (params["cluster_name"], None, e))
-        if pool != None:
-            pool.terminate()
-        aws_instance.clean_up()
-        
-    except KeyboardInterrupt:
-        if pool != None:
-            pool.terminate()
-        aws_instance.clean_up()
+    if aws_instance.create_cluster() and aws_instance.register_task_definition():
+        return loop_process(aws_instance, params, task_params)
     
     return 1
     
