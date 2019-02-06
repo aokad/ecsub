@@ -444,75 +444,6 @@ def submit_task(aws_instance, no, task_params, spot):
 
     _save_summary_file(job_summary, True)
     exit (exit_code)
-
-def loop_process(aws_instance, params, task_params):
-    
-    max_all_jobs = params["processes"]
-    data = task_params["tasks"]
-    process_list = []
-    
-    try:
-        # create-cluster
-        # and register-task-definition
-        if not aws_instance.create_cluster():
-            aws_instance.clean_up()
-            return 1
-        if not aws_instance.register_task_definition():
-            aws_instance.clean_up()
-            return 1
-        
-        while len(process_list) < len(data):
-            alives = 0
-            for process in process_list:
-                if process.exitcode == None:
-                   alives += 1
-                    
-            jobs = max_all_jobs - alives
-            submitted = len(process_list)
-            
-            for i in range(jobs):
-                no = i + submitted
-                if no >= len(data):
-                    break
-                    
-                process = multiprocessing.Process(
-                        target = submit_task, 
-                        name = "%s_%03d" % (params["cluster_name"], no), 
-                        args = ((aws_instance, no, task_params, params["spot"]))
-                )
-                process.daemon == True
-                process.start()
-                
-                process_list.append(process)
-                
-                time.sleep(5)
-            
-            time.sleep(5)
-        
-        exitcodes = []
-        for process in process_list:
-            process.join()
-            if process.exitcode != None:
-                exitcodes.append(process.exitcode)
-        
-        aws_instance.clean_up()
-        # SUCCESS?
-        if [0] == list(set(exitcodes)):
-            return 0
-        
-    except Exception as e:
-        print (e)
-        
-        for process in process_list:
-            process.terminate()
-                
-        aws_instance.clean_up()
-        
-    except KeyboardInterrupt:
-        print ("KeyboardInterrupt")
-        aws_instance.clean_up()
-    
-    return 1
     
 def main(params):
     
@@ -598,7 +529,73 @@ def main(params):
                    params["shell"],
                    params["request_payer"])
 
-    return loop_process(aws_instance, params, task_params)
+    # run purocesses
+    process_list = []
+    
+    try:
+        # create-cluster
+        # and register-task-definition
+        if not aws_instance.create_cluster():
+            aws_instance.clean_up()
+            return 1
+        if not aws_instance.register_task_definition():
+            aws_instance.clean_up()
+            return 1
+        
+        while len(process_list) < len(task_params["tasks"]):
+            alives = 0
+            for process in process_list:
+                if process.exitcode == None:
+                   alives += 1
+                    
+            jobs = params["processes"] - alives
+            submitted = len(process_list)
+            
+            for i in range(jobs):
+                no = i + submitted
+                if no >= len(task_params["tasks"]):
+                    break
+                    
+                process = multiprocessing.Process(
+                        target = submit_task, 
+                        name = "%s_%03d" % (params["cluster_name"], no), 
+                        args = ((aws_instance, no, task_params, params["spot"]))
+                )
+                process.daemon == True
+                process.start()
+                
+                process_list.append(process)
+                
+                time.sleep(5)
+            
+            time.sleep(5)
+        
+        exitcodes = []
+        for process in process_list:
+            process.join()
+            if process.exitcode != None:
+                exitcodes.append(process.exitcode)
+        
+        aws_instance.clean_up()
+        # SUCCESS?
+        if [0] == list(set(exitcodes)):
+            return 0
+        
+    except Exception as e:
+        print (e)
+        for process in process_list:
+            process.terminate()
+                
+        aws_instance.clean_up()
+        
+    except KeyboardInterrupt:
+        print ("KeyboardInterrupt")
+        for process in process_list:
+            process.terminate()
+            
+        aws_instance.clean_up()
+    
+    return 1
     
 def entry_point(args, unknown_args):
     
