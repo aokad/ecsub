@@ -98,6 +98,7 @@ usage: ecsub submit [-h] [--wdir path/to/dir] [--image docker/image:tag]
                     [--aws-security-group-id sg-ab123456]
                     [--aws-key-name key-123ab]
                     [--aws-subnet-id subnet-123456ab] [--spot] [--retry-od]
+                    [--request-payer-bucket bucket-name]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -128,6 +129,9 @@ optional arguments:
                         AWS subnet_id
   --spot                [spot] use spot instance
   --retry-od            [spot] In case of failure, retry on demand instance
+  --request-payer-bucket bucket-name
+                        Aware that you will be charged for downloading objects
+                        in requester pays buckets. Split with ','
 ```
 
 For example,
