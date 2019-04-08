@@ -52,6 +52,7 @@ def entry_point(args, unknown_args):
         "wdir": args.wdir,
         "task_name": args.task_name,
         "setx": "set -x",
+        "setup_container_cmd": "",
     }
     return main(params)
     
