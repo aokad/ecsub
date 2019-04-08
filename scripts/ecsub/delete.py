@@ -36,6 +36,8 @@ def main(params):
     params["aws_subnet_id"] = ""
     params["retry_od"] = False
     params["request_payer"] = []
+    params["setup_container_cmd"] = ""
+    params["dind"] = False
     
     aws_instance = ecsub.aws.Aws_ecsub_control(params, 1)
     aws_instance.aws_key_auto = summary["AutoKey"]
@@ -51,8 +53,7 @@ def entry_point(args, unknown_args):
     params = {
         "wdir": args.wdir,
         "task_name": args.task_name,
-        "setx": "set -x",
-        "setup_container_cmd": "",
+        "setx": "set -x"
     }
     return main(params)
     
