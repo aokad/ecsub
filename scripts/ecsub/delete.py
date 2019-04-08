@@ -51,7 +51,7 @@ def entry_point(args, unknown_args):
     params = {
         "wdir": args.wdir,
         "task_name": args.task_name,
-        "set_cmd": "set -x",
+        "setx": "set -x",
     }
     return main(params)
     
