@@ -30,8 +30,12 @@ class Aws_ecsub_control:
         
         self.wdir = params["wdir"].rstrip("/")
         self.cluster_name = params["cluster_name"]
-        self.set_cmd = params["set_cmd"]
+        self.setx = params["setx"]
         self.shell = params["shell"]
+        self.setup_container_cmd = params["setup_container_cmd"]
+        if self.setup_container_cmd == "":
+            self.setup_container_cmd = "apt update; apt install -y python-pip; pip install awscli --upgrade; aws configure list"
+        self.dind = params["dind"]
         self.log_group_name = "ecsub-" + self.cluster_name
         
         self.aws_ami_id = ecsub.aws_config.get_ami_id()
@@ -114,8 +118,8 @@ class Aws_ecsub_control:
         if ecsub.tools.is_request_payer_bucket(path, self.request_payer):
             option = "--request-payer requester"
             
-        cmd_template = "{set_cmd}; aws s3 ls {option} {path}"
-        cmd = cmd_template.format(set_cmd = self.set_cmd, path = path, option = option)
+        cmd_template = "{setx}; aws s3 ls {option} {path}"
+        cmd = cmd_template.format(setx = self.setx, path = path, option = option)
         response = self._subprocess_communicate(cmd)
     
         if response == "":
@@ -172,7 +176,7 @@ class Aws_ecsub_control:
     
     def s3_copy(self, src, dst, recursive, no = None):
 
-        cmd_template = "{set_cmd}; aws s3 cp --only-show-errors {option} {file1} {file2}"
+        cmd_template = "{setx}; aws s3 cp --only-show-errors {option} {file1} {file2}"
 
         option = ""
         if recursive:
@@ -185,7 +189,7 @@ class Aws_ecsub_control:
             option += "--request-payer requester"
             
         cmd = cmd_template.format(
-            set_cmd = self.set_cmd,
+            setx = self.setx,
             file1 = src,
             file2 = dst,
             option = option
@@ -252,9 +256,9 @@ class Aws_ecsub_control:
                 return True
 
         log_file = self._log_path("create-key-pair")
-        cmd_template = "{set_cmd}; aws ec2 create-key-pair --key-name {key_name} > {log}"
+        cmd_template = "{setx}; aws ec2 create-key-pair --key-name {key_name} > {log}"
         cmd = cmd_template.format(
-            set_cmd = self.set_cmd,
+            setx = self.setx,
             key_name = self.cluster_name,
             log = log_file
         )
@@ -301,9 +305,9 @@ class Aws_ecsub_control:
 
         log_file = self._log_path("create-cluster")
 
-        cmd_template = "{set_cmd}; aws ecs create-cluster --cluster-name {cluster_name} > {log}"
+        cmd_template = "{setx}; aws ecs create-cluster --cluster-name {cluster_name} > {log}"
         cmd = cmd_template.format(
-            set_cmd = self.set_cmd,
+            setx = self.setx,
             cluster_name = self.cluster_name,
             log = log_file
         )
@@ -330,6 +334,33 @@ class Aws_ecsub_control:
         option = ""
         if ecsub.tools.is_request_payer_bucket(self.s3_runsh, self.request_payer):
             option = "--request-payer requester "
+        
+        mountpoints = [
+            {
+                "sourceVolume": "scratch",
+                "containerPath": "/scratch"
+            }
+        ]
+        volumes = [
+            {
+                "name": "scratch",
+                "host": {"sourcePath": "/external"}
+            }
+        ]
+        
+        if self.dind:
+            mountpoints.append(
+                {
+                    "sourceVolume": "dockersock",
+                    "containerPath": "/var/run/docker.sock"
+                }
+            )
+            volumes.append(
+                {
+                    "name": "dockersock",
+                    "host": {"sourcePath": "/var/run/docker.sock"}
+                }
+            )
             
         containerDefinitions = {
             "containerDefinitions": [
@@ -344,7 +375,7 @@ class Aws_ecsub_control:
                           "-c"
                       ],
                       "command": [
-                          "apt update; apt install -y python-pip; pip install awscli --upgrade; aws configure list; aws s3 cp " + option + self.s3_runsh + " /run.sh; " + self.shell + " /run.sh"
+                          self.setup_container_cmd + "; aws s3 cp " + option + self.s3_runsh + " /run.sh; " + self.shell + " /run.sh"
                       ],
                       "environment": [
                           {
@@ -372,25 +403,13 @@ class Aws_ecsub_control:
                               "awslogs-stream-prefix": "ecsub"
                           }
                       },
-                      "mountPoints": [
-                          {
-                              "containerPath": "/scratch",
-                              "sourceVolume": "scratch"
-                          }
-                      ],
+                      "mountPoints": mountpoints,
                       "workingDirectory": "/scratch",
                 }
             ],
             "taskRoleArn": ECSTASKROLE,
             "family": self.cluster_name,
-            "volumes": [
-                {
-                    "name": "scratch",
-                    "host": {
-                        "sourcePath": "/external"
-                    }
-                }
-            ]
+            "volumes": volumes
         }
 
         json_file = self._conf_path("task_definition.json")
@@ -398,20 +417,20 @@ class Aws_ecsub_control:
         
         # check exists ECS cluster
         cmd_template = "aws logs describe-log-groups --log-group-name-prefix {log_group_name} | grep logGroupName | grep \"{log_group_name}\" | wc -l"
-        cmd = cmd_template.format(set_cmd = self.set_cmd, log_group_name = self.log_group_name)
+        cmd = cmd_template.format(setx = self.setx, log_group_name = self.log_group_name)
         response = self._subprocess_communicate(cmd)
         
         if int(response) == 0:
-            cmd_template = "{set_cmd}; aws logs create-log-group --log-group-name {log_group_name}"
-            cmd = cmd_template.format(set_cmd = self.set_cmd, log_group_name = self.log_group_name)
+            cmd_template = "{setx}; aws logs create-log-group --log-group-name {log_group_name}"
+            cmd = cmd_template.format(setx = self.setx, log_group_name = self.log_group_name)
             self._subprocess_call(cmd)
 
         #  register-task-definition
         log_file = self._log_path("register-task-definition")
-        cmd_template = "{set_cmd}; aws ecs register-task-definition --cli-input-json file://{json} > {log}"
+        cmd_template = "{setx}; aws ecs register-task-definition --cli-input-json file://{json} > {log}"
 
         cmd = cmd_template.format(
-            set_cmd = self.set_cmd,
+            setx = self.setx,
             json = json_file,
             log = log_file
         )
@@ -496,16 +515,16 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
     def _wait_run_instance(self, instance_id, no):
         
         if instance_id != "":
-            cmd_template = "{set_cmd}; aws ec2 wait instance-running --instance-ids {INSTANCE_ID}"
+            cmd_template = "{setx}; aws ec2 wait instance-running --instance-ids {INSTANCE_ID}"
             cmd = cmd_template.format(
-                set_cmd = self.set_cmd,
+                setx = self.setx,
                 INSTANCE_ID = instance_id
             )
             self._subprocess_call(cmd, no)
     
-            cmd_template = "{set_cmd}; aws ec2 wait instance-status-ok --include-all-instances --instance-ids {INSTANCE_ID}"
+            cmd_template = "{setx}; aws ec2 wait instance-status-ok --include-all-instances --instance-ids {INSTANCE_ID}"
             cmd = cmd_template.format(
-                set_cmd = self.set_cmd,
+                setx = self.setx,
                 INSTANCE_ID = instance_id
             )
             self._subprocess_call(cmd, no)
@@ -535,7 +554,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         if self.aws_subnet_id != "":
             subnet_id = "--subnet-id %s" % (self.aws_subnet_id)
 
-        cmd_template = "{set_cmd};" \
+        cmd_template = "{setx};" \
             + "aws ec2 run-instances" \
             + " --image-id {AMI_ID}" \
             + " --security-group-ids {SECURITYGROUPID}" \
@@ -548,7 +567,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             + " > {log}"
 
         cmd = cmd_template.format(
-            set_cmd = self.set_cmd,
+            setx = self.setx,
             AMI_ID = self.aws_ami_id,
             SECURITYGROUPID = self.aws_security_group_id,
             KEY_NAME = self.aws_key_name,
@@ -735,7 +754,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         
         log_file = self._log_path("request-spot-instances.%03d" % (no))
         
-        cmd_template = "{set_cmd};" \
+        cmd_template = "{setx};" \
             + "aws ec2 request-spot-instances" \
             + " --instance-count 1" \
             + " --type 'one-time'" \
@@ -743,7 +762,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             + " > {log};"
         
         cmd = cmd_template.format(
-            set_cmd = self.set_cmd,
+            setx = self.setx,
             specification_file = specification_file,
             log = log_file
         )
@@ -771,9 +790,9 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                         return instance_id
                 
                 elif state == "open" and status_code == 'pending-evaluation':
-                    cmd_template = "{set_cmd}; aws ec2 wait spot-instance-request-fulfilled --spot-instance-request-ids {REQUEST_ID}"
+                    cmd_template = "{setx}; aws ec2 wait spot-instance-request-fulfilled --spot-instance-request-ids {REQUEST_ID}"
                     cmd = cmd_template.format(
-                        set_cmd = self.set_cmd,
+                        setx = self.setx,
                         REQUEST_ID = request_id
                     )
                     self._subprocess_call(cmd, no)
@@ -867,7 +886,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         containerOverrides = {
             "containerOverrides": [
                 {
-                    "cpu": task_vcpu,
+                    "cpu": task_vcpu*1024,
                     "memory": task_memory,
                     "name": self.cluster_name + "_task",
                     "environment": [
@@ -892,14 +911,14 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
 
         log_file = self._log_path("start-task.%03d" % (no))
 
-        cmd_template = "{set_cmd}; " \
+        cmd_template = "{setx}; " \
             + "aws ecs start-task --cluster {CLUSTER_ARN}" \
             + " --task-definition {TASK_DEFINITION_ARN}" \
             + " --overrides file://{OVERRIDES}" \
             + " --container-instances {INSTANCE_ID} > {log}"
 
         cmd = cmd_template.format(
-            set_cmd = self.set_cmd,
+            setx = self.setx,
             CLUSTER_ARN = self.cluster_arn,
             TASK_DEFINITION_ARN = self.task_definition_arn,
             OVERRIDES = overrides,
@@ -916,7 +935,7 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             
             log_file_retry = self._log_path("start-task-retry.%03d" % (no))
             cmd = cmd_template.format(
-                set_cmd = self.set_cmd,
+                setx = self.setx,
                 CLUSTER_ARN = self.cluster_arn,
                 TASK_DEFINITION_ARN = self.task_definition_arn,
                 OVERRIDES = overrides,
@@ -965,10 +984,10 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
 
         # set Name to instance
         instanceName = "{cluster_name}.{I}".format(cluster_name = self.cluster_name, I = no)
-        cmd_template = "{set_cmd};aws ec2 create-tags --resources {INSTANCE_ID} --tags Key=Name,Value={instanceName}"
+        cmd_template = "{setx};aws ec2 create-tags --resources {INSTANCE_ID} --tags Key=Name,Value={instanceName}"
 
         cmd = cmd_template.format(
-            set_cmd = self.set_cmd,
+            setx = self.setx,
             INSTANCE_ID = instance_id,
             instanceName = instanceName
         )
@@ -979,10 +998,10 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         )
         
         # wait to task-stop
-        cmd_template = "{set_cmd};aws ecs wait tasks-stopped --tasks {TASK_ARN} --cluster {CLUSTER_ARN}"
+        cmd_template = "{setx};timeout 5m aws ecs wait tasks-stopped --tasks {TASK_ARN} --cluster {CLUSTER_ARN}"
 
         cmd = cmd_template.format(
-            set_cmd = self.set_cmd,
+            setx = self.setx,
             CLUSTER_ARN = self.cluster_arn,
             TASK_ARN = task_arn
         )
@@ -1082,12 +1101,12 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         if no != None:
             log_file = self._log_path("terminate-instances.%03d" % (no))
 
-        cmd_template = "{set_cmd};" \
+        cmd_template = "{setx};" \
             + "aws ec2 terminate-instances --instance-ids {ec2InstanceId} > {log};" \
             + "aws ec2 wait instance-terminated --instance-ids {ec2InstanceId}"
 
         cmd = cmd_template.format(
-            set_cmd = self.set_cmd,
+            setx = self.setx,
             log = log_file,
             ec2InstanceId = instance_id
         )
@@ -1107,11 +1126,11 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
                     spot_req_id = response['SpotInstanceRequestId']
 
         if spot_req_id != None:
-            cmd_template = "{set_cmd};" \
+            cmd_template = "{setx};" \
                 + "aws ec2 cancel-spot-instance-requests --spot-instance-request-ids {spot_req_id} > {log}"
 
             cmd = cmd_template.format(
-                set_cmd = self.set_cmd,
+                setx = self.setx,
                 log = log_file,
                 spot_req_id = spot_req_id
             )
@@ -1168,9 +1187,9 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
         if self.cluster_arn != "":
             response = boto3.client('ecs').describe_clusters(clusters=[self.cluster_arn])
             if len(response["clusters"]) > 0:
-                cmd_template = "{set_cmd}; aws ecs delete-cluster --cluster {cluster} > {log}"
+                cmd_template = "{setx}; aws ecs delete-cluster --cluster {cluster} > {log}"
                 cmd = cmd_template.format(
-                    set_cmd = self.set_cmd,
+                    setx = self.setx,
                     cluster = self.cluster_arn,
                     log = self._log_path("delete-cluster")
                 )
@@ -1181,9 +1200,9 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
             try:
                 response = boto3.client('ecs').describe_task_definition(taskDefinition=self.task_definition_arn)
 
-                cmd_template = "{set_cmd}; aws ecs deregister-task-definition --task-definition {task} > {log}"
+                cmd_template = "{setx}; aws ecs deregister-task-definition --task-definition {task} > {log}"
                 cmd = cmd_template.format(
-                    set_cmd = self.set_cmd,
+                    setx = self.setx,
                     task = self.task_definition_arn,
                     log = self._log_path("deregister-task-definition")
                 )
@@ -1193,9 +1212,9 @@ cloud-init-per once mount_sdb mount /dev/sdb /external
 
         # delete ssh key pair
         if self.aws_key_auto:
-            cmd_template = "{set_cmd}; aws ec2 delete-key-pair --key-name {key_name} > {log}"
+            cmd_template = "{setx}; aws ec2 delete-key-pair --key-name {key_name} > {log}"
             cmd = cmd_template.format(
-                set_cmd = self.set_cmd,
+                setx = self.setx,
                 key_name = self.aws_key_name,
                 log = self._log_path("delete-key-pair")
             )

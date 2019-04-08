@@ -28,6 +28,8 @@ def main():
     submit_parser.add_argument("--image", metavar = "docker/image:tag", help = "docker image", type = str, default = "python:2.7.14")
     submit_parser.add_argument("--use_amazon_ecr", help = "use_amazon_ecr", action = 'store_true')
     submit_parser.add_argument("--shell", metavar = "path/to/bash", help = "path to bash or ash in docker-container", type = str, default = "/bin/bash")
+    submit_parser.add_argument("--setup-container-cmd", metavar = '"pip install awscli"', help = "awscli install command", type = str, default = "apt update; apt install -y python-pip; pip install awscli --upgrade; aws configure list")
+    submit_parser.add_argument("--dind", help = "Docker in Docker?", action = 'store_true')
     submit_parser.add_argument("--script", metavar = "path/to/script.sh", help = "run script", type = str, required=True)
     submit_parser.add_argument("--tasks", metavar = "path/to/tasks.tsv", help = "parameters", type = str, required=True)
     submit_parser.add_argument("--task-name", metavar = "task-name", help = "submit name as AWS ECS cluster name", type = str, default = "")

@@ -253,7 +253,7 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
         
     aws_instance.s3_copy(local_root, s3_root, True)
     
-    s3_script = s3_root + "/" + os.path.basename(script)
+    s3_script = s3_root + "/userdata/" + os.path.basename(script)
     aws_instance.s3_copy(script, s3_script, False)
     
     aws_instance.set_s3files(s3_runsh, s3_script, s3_setenv_list, s3_downloader_list, s3_uploader_list)
@@ -616,7 +616,9 @@ def entry_point(args, unknown_args):
         "aws_subnet_id": args.aws_subnet_id,
         "spot": args.spot,
         "retry_od": args.retry_od,
-        "set_cmd": "set -x",
+        "setx": "set -x",
+        "setup_container_cmd": args.setup_container_cmd,
+        "dind": args.dind,
         "processes": args.processes,
         "request_payer": args.request_payer_bucket
     }
