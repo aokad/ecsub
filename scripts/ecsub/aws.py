@@ -490,6 +490,10 @@ EOF
 cloud-init-per once mkfs_sdb mkfs -t ext4 /dev/sdb
 cloud-init-per once mkdir_external mkdir /external
 cloud-init-per once mount_sdb mount /dev/sdb /external
+
+echo "aws configure set aws_access_key_id "\$(aws configure get aws_access_key_id) > /external/aws_confgure.sh
+echo "aws configure set aws_secret_access_key "\$(aws configure get aws_secret_access_key) >> /external/aws_confgure.sh
+echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
 --==BOUNDARY==--
 """.format(cluster_arn = self.cluster_arn, disk_size = self.aws_ec2_instance_disk_size, region = self.aws_region)
 
