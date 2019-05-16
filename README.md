@@ -1,14 +1,13 @@
 [![Build Status](https://travis-ci.org/aokad/ecsub.svg?branch=master)](https://travis-ci.org/aokad/ecsub)
-![Python](https://img.shields.io/badge/python-2.7-blue.svg)
-![Python](https://img.shields.io/badge/python-3.x-blue.svg)
+![Python](https://img.shields.io/badge/python-2.7%20%7C%203.5%20%7C%203.6%20%7C%203.7-blue.svg)
 
 # ecsub
 
 ## 1. Dependency
 
- - python >= 2.7
  - [awscli](https://docs.aws.amazon.com/streams/latest/dev/kinesis-tutorial-cli-installation.html)
  - [boto3](https://github.com/boto/boto3)
+ - pytz
  - six
 
 ## 2. Install

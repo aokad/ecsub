@@ -12,7 +12,7 @@ import glob
 import subprocess
 import datetime
 
-class DailyTest(unittest.TestCase):
+class SubmitTest(unittest.TestCase):
 
     WDIR = None
     BEFORE = None
@@ -111,6 +111,6 @@ class DailyTest(unittest.TestCase):
 
 def suite():
     suite = unittest.TestSuite()
-    suite.addTests(unittest.makeSuite(DailyTest))
+    suite.addTests(unittest.makeSuite(SubmitTest))
     return suite
 
