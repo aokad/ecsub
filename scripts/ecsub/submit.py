@@ -324,6 +324,8 @@ def submit_task_spot(aws_instance, no):
                 
             if system_error:
                 continue
+            elif exit_code == -1:
+                break
             else:
                 return (exit_code, task_log, False)
     

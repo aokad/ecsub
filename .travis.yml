@@ -7,29 +7,23 @@ matrix:
     - name: "Python 3.8"
       python: 3.8-dev
       dist: xenial
-      env:
-        - SUBMIT=1
+      env: SUBMIT=0
     - name: "Python 3.7"
       python: 3.7
       dist: xenial
-      env:
-        - SUBMIT=1
+      env: SUBMIT=1
     - name: "Python 3.6"
       python: 3.6
-      env:
-        - SUBMIT=0
+      env: SUBMIT=0
     - name: "Python 3.5"
       python: 3.5
-      env:
-        - SUBMIT=1
+      env: SUBMIT=0
     - name: "Python 3.4"
       python: 3.4
-      env:
-        - SUBMIT=1
+      env: SUBMIT=0
     - name: "Python 2.7"
       python: 2.7
-      env:
-        - SUBMIT=0
+      env: SUBMIT=1
 
 before_script:
  - mkdir ~/.aws;

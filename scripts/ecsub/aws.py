@@ -844,6 +844,13 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         return (None, error_message)
         
     def run_task (self, no, instance_id):
+        """
+        exit_code: 0    Success
+        exit_code: 1    Error
+        exit_code: 127  SystemError
+        exit_code: -1   SpotInstance terminated-capacity-oversubscribed
+        """
+        
         import math
         
         exit_code = 1
@@ -1002,7 +1009,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         )
         
         # wait to task-stop
-        cmd_template = "{setx};timeout 5m aws ecs wait tasks-stopped --tasks {TASK_ARN} --cluster {CLUSTER_ARN}"
+        cmd_template = "{setx};aws ecs wait tasks-stopped --tasks {TASK_ARN} --cluster {CLUSTER_ARN}"
 
         cmd = cmd_template.format(
             setx = self.setx,
@@ -1016,6 +1023,8 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             tasks=[task_arn]
         )
         while True:
+            if len(response["tasks"]) == 0:
+                return (exit_code, log_file)
             if response["tasks"][0]['lastStatus'] != "RUNNING":
                 break
 
@@ -1057,45 +1066,16 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             if exit_code != 0:
                 print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (response["tasks"][0]["stoppedReason"])))
 
-#        # check spot insatance was canceled?
-#        interrupt = True
-#        if self.task_param[no]["spot"] == False:
-#            interrupt = False
-#        else:
-#            if exit_code == 0:
-#                interrupt = False
-#            elif exit_code == 127:
-#                interrupt = True
-#            else:
-#                response = self._describe_spot_instances(no, instance_id = instance_id)
-#                if response == None:
-#                    interrupt = False
-#                else:
-#                    state = response['State']
-#                    status_code = response['Status']['Code']
-#                    
-#                    #until_t = ecsub.tools.isoformat_to_datetime(response['ValidUntil'])
-#                    until_t = response['ValidUntil']
-#                    now_t = datetime.datetime.utcnow()
-#                    cancel_message = "Spot instance was cancelled. [Status] %s [Code] %s [Message] %s" % (
-#                            response['State'],
-#                            response['Status']['Code'],
-#                            response['Status']['Message'])
-#                    
-#                    # spot-instance is running -> task mistake
-#                    if state == "active" and status_code == 'fulfilled':
-#                        interrupt = False
-#                    else:
-#                        print(ecsub.tools.error_message (self.cluster_name, no, cancel_message))
-#                    
-#                        # cancelled by user
-#                        if state == "cancelled" and status_code == 'instance-terminated-by-user':
-#                            interrupt = False
-#                        # spot instance time-out -> long long task
-#                        elif now_t > until_t:
-#                            interrupt = False
-#                        else:
-#                            interrupt = True
+        # check spot insatance was canceled?
+        if self.task_param[no]["spot"]:
+            response = boto3.client("ec2").describe_spot_instance_requests(
+                Filters = [
+                    {"Name":"instance-id", "Values": [instance_id]}
+                ]
+            )
+            if len(response['SpotInstanceRequests']) > 0:
+                if response['SpotInstanceRequests'][0]["Status"]["Code"] == 'instance-terminated-capacity-oversubscribed':
+                    exit_code = -1
 
         return (exit_code, log_file)
 
