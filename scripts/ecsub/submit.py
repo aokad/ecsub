@@ -223,8 +223,12 @@ def check_inputfiles(aws_instance, task_params, cluster_name, payer_buckets, wor
     dirs = []
     files_rp = []
     dirs_rp = []
+    outputs = []
     for task in task_params["tasks"]:
         for i in range(len(task)):
+            if task_params["header"][i]["type"] == "output":
+                outputs.append(task[i])
+                
             if task_params["header"][i]["type"] != "input":
                 continue
             
@@ -243,7 +247,7 @@ def check_inputfiles(aws_instance, task_params, cluster_name, payer_buckets, wor
                 else:
                     files.append(path)
     
-    regions = check_bucket_location(dirs + files + [work_bucket])
+    regions = check_bucket_location(dirs + files + [work_bucket] + outputs)
           
     invalid_files = []
     invalid_files += check_inputfiles_collect(sorted(list(set(files))), sorted(list(set(dirs))), cluster_name)
