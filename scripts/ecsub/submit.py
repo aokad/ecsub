@@ -278,7 +278,11 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
     s3_script = s3_root + "/userdata/" + os.path.basename(script)
     aws_instance.s3_copy(script, s3_script, False)
     
-    invalid_files = check_inputfiles_collect([s3_runsh, s3_script] + s3_setenv_list + s3_downloader_list + s3_uploader_list, [], cluster_name)
+    pathes = []
+    for p in [s3_runsh, s3_script] + s3_setenv_list + s3_downloader_list + s3_uploader_list:
+        pathes.append(p.replace("s3://", "", 1).strip("/").rstrip("/"))
+        
+    invalid_files = check_inputfiles_collect(pathes, [], cluster_name)
     #invalid_files = check_inputfiles_partial(aws_instance, [s3_runsh, s3_script] + s3_setenv_list + s3_downloader_list + s3_uploader_list, [])
     if len(invalid_files) > 0:
         return False
