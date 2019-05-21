@@ -88,8 +88,9 @@ Role:
 ```
 $ ecsub submit --help
 usage: ecsub submit [-h] [--wdir path/to/dir] [--image docker/image:tag]
-                    [--use_amazon_ecr] [--shell path/to/bash] --script
-                    path/to/script.sh --tasks path/to/tasks.tsv
+                    [--use_amazon_ecr] [--shell path/to/bash]
+                    [--setup-container-cmd "pip install awscli"] [--dind]
+                    --script path/to/script.sh --tasks path/to/tasks.tsv
                     [--task-name task-name] --aws-s3-bucket s3://output/bucket
                     [--aws-ec2-instance-type t2.micro]
                     [--aws-ec2-instance-type-list t3.micro,t2.micro]
@@ -97,7 +98,7 @@ usage: ecsub submit [-h] [--wdir path/to/dir] [--image docker/image:tag]
                     [--aws-security-group-id sg-ab123456]
                     [--aws-key-name key-123ab]
                     [--aws-subnet-id subnet-123456ab] [--spot] [--retry-od]
-                    [--request-payer-bucket bucket-name]
+                    [--request-payer-bucket bucket-name] [--ignore-location]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -106,6 +107,9 @@ optional arguments:
                         docker image
   --use_amazon_ecr      use_amazon_ecr
   --shell path/to/bash  path to bash or ash in docker-container
+  --setup-container-cmd "pip install awscli"
+                        awscli install command
+  --dind                Docker in Docker?
   --script path/to/script.sh
                         run script
   --tasks path/to/tasks.tsv
@@ -131,6 +135,7 @@ optional arguments:
   --request-payer-bucket bucket-name
                         Aware that you will be charged for downloading objects
                         in requester pays buckets. Split with ','
+  --ignore-location     Ignore differences in location
 ```
 
 For example,

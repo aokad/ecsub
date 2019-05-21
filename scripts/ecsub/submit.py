@@ -197,7 +197,27 @@ def check_inputfiles_partial(aws_instance, files, dirs):
 
     return []
 
-def check_inputfiles(aws_instance, task_params, cluster_name, payer_buckets):
+def check_bucket_location(pathes):
+    buckets = []
+    for p in pathes:
+        path = p.replace("s3://", "", 1).strip("/").rstrip("/").split("/")[0]
+        if path == "":
+            continue
+        buckets.append(path)
+    
+    client = boto3.client("s3")
+    regions = []
+    for bucket in sorted(list(set(buckets))):
+        response = client.get_bucket_location(Bucket=bucket)
+        regions.append(response['LocationConstraint'])
+    
+    current_session = boto3.session.Session()
+    regions.append(current_session.region_name)
+    regions = sorted(list(set(regions)))
+    
+    return regions
+
+def check_inputfiles(aws_instance, task_params, cluster_name, payer_buckets, work_bucket):
     
     files = []
     dirs = []
@@ -222,12 +242,14 @@ def check_inputfiles(aws_instance, task_params, cluster_name, payer_buckets):
                     dirs.append(path)
                 else:
                     files.append(path)
-                    
+    
+    regions = check_bucket_location(dirs + files + [work_bucket])
+          
     invalid_files = []
     invalid_files += check_inputfiles_collect(sorted(list(set(files))), sorted(list(set(dirs))), cluster_name)
     invalid_files += check_inputfiles_partial(aws_instance, sorted(list(set(files_rp))), sorted(list(set(dirs_rp))))
     
-    return invalid_files
+    return (regions, invalid_files)
 
 def upload_scripts(task_params, aws_instance, local_root, s3_root, script, cluster_name, shell, request_payer):
 
@@ -255,6 +277,11 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
     
     s3_script = s3_root + "/userdata/" + os.path.basename(script)
     aws_instance.s3_copy(script, s3_script, False)
+    
+    invalid_files = check_inputfiles_collect([s3_runsh, s3_script] + s3_setenv_list + s3_downloader_list + s3_uploader_list, [], cluster_name)
+    #invalid_files = check_inputfiles_partial(aws_instance, [s3_runsh, s3_script] + s3_setenv_list + s3_downloader_list + s3_uploader_list, [])
+    if len(invalid_files) > 0:
+        return False
     
     aws_instance.set_s3files(s3_runsh, s3_script, s3_setenv_list, s3_downloader_list, s3_uploader_list)
     
@@ -513,7 +540,14 @@ def main(params):
         return 1
 
     # check s3-files path
-    invalid_pathes = check_inputfiles(aws_instance, task_params, params["cluster_name"], params["request_payer"])
+    (regions, invalid_pathes) = check_inputfiles(aws_instance, task_params, params["cluster_name"], params["request_payer"], params["aws_s3_bucket"])
+    if len(regions) > 1:
+        if params["ignore_location"]:
+            print (ecsub.tools.warning_message (params["cluster_name"], None, "your task uses multipule regions '%s'." % (",".join(regions))))
+        else:
+            print (ecsub.tools.error_message (params["cluster_name"], None, "your task uses multipule regions '%s'." % (",".join(regions))))
+            return 1
+        
     for r in invalid_pathes:
         print (ecsub.tools.error_message (params["cluster_name"], None, "input '%s' is not access." % (r)))
     if len(invalid_pathes)> 0:
@@ -522,15 +556,17 @@ def main(params):
     # write task-scripts, and upload to S3
     local_script_dir = params["wdir"] + "/script"
     s3_script_dir = params["aws_s3_bucket"].rstrip("/") + "/script"
-    upload_scripts(task_params, 
+    if not upload_scripts(task_params, 
                    aws_instance, 
                    local_script_dir, 
                    s3_script_dir,
                    params["script"],
                    params["cluster_name"],
                    params["shell"],
-                   params["request_payer"])
-
+                   params["request_payer"]):
+        print (ecsub.tools.error_message (params["cluster_name"], None, "failure upload files to s3 bucket: %s." % (params["aws_s3_bucket"])))
+        return 1
+    
     # run purocesses
     process_list = []
     
@@ -622,7 +658,8 @@ def entry_point(args, unknown_args):
         "setup_container_cmd": args.setup_container_cmd,
         "dind": args.dind,
         "processes": args.processes,
-        "request_payer": args.request_payer_bucket
+        "request_payer": args.request_payer_bucket,
+        "ignore_location": args.ignore_location,
     }
     return main(params)
     
