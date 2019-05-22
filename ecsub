@@ -45,7 +45,7 @@ def main():
     submit_parser.add_argument("--retry-od", help = "[spot] In case of failure, retry on demand instance", action = 'store_true')
     submit_parser.add_argument("--request-payer-bucket", metavar = "bucket-name", help = "Aware that you will be charged for downloading objects in requester pays buckets. Split with ',' ", type = str, default = "")
     submit_parser.add_argument("--ignore-location", help = "Ignore differences in location", action = 'store_true')
-    submit_parser.add_argument("--fly-away", help = "Dont wait task end", action = 'store_true', metavar = "Development")
+    submit_parser.add_argument("--fly-away", help = "Dont wait task end", action = 'store_true')
     submit_parser.set_defaults(func = submit.entry_point)
     
     ##########
