@@ -14,7 +14,7 @@ def main(params):
     params["wdir"] =  params["wdir"].rstrip("/")
     summary_list = glob.glob("%s/%s/log/summary.*.log" % (params["wdir"], params["task_name"]))
     if len(summary_list) == 0:
-        print (ecsub.tools.error_message (params["task_name"], None, "task-name %s is not find in directory %s." % (params["task_name"], params["wdir"])))
+        ecsub.tools.error_message (params["task_name"], None, "task-name %s is not find in directory %s." % (params["task_name"], params["wdir"]))
         return 1
     
     params["wdir"] =  "%s/%s" % (params["wdir"].rstrip("/"), params["task_name"])

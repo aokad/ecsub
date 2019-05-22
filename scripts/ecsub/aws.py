@@ -7,7 +7,6 @@ Created on Wed Mar 14 15:06:50 2018
 
 import subprocess
 import json
-import sys
 import os
 import datetime
 import time
@@ -19,7 +18,7 @@ import glob
 
 class Aws_ecsub_control:
 
-    def __init__(self, params, task_num):
+    def __init__(self, params, task_num, log_fp):
         
         self.aws_accountid = self._get_aws_account_id()
         self.aws_region = self._get_region()
@@ -74,6 +73,9 @@ class Aws_ecsub_control:
                 "spot_price": 0,
             })
     
+        self.log_fp = log_fp
+        self.fly_away = params["fly_away"]
+        
     def _subprocess_communicate (self, cmd):
         response = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).communicate()[0]
         if type(response) == type(b''):
@@ -95,24 +97,26 @@ class Aws_ecsub_control:
                     break
 
         for line in __subprocess_call(cmd):
-            if no != None:
-                line = "%s " % (str(datetime.datetime.now())) + ecsub.ansi.colors.paint("[%s:%03d]" % (self.cluster_name, no), ecsub.ansi.colors.roll_list[no % len(ecsub.ansi.colors.roll_list)]) + line
-            else:
-                line = ecsub.tools.info_message (self.cluster_name, None, line)
-                
+#            if no != None:
+#                "%s " % (str(datetime.datetime.now()))
+#                    + ecsub.ansi.colors.paint("[%s:%03d]" % (self.cluster_name, no), ecsub.ansi.colors.roll_list[no % len(ecsub.ansi.colors.roll_list)]) 
+#                    + line
+#            else:
+#                ecsub.tools.info_message (self.cluster_name, None, line)
+#                
             if len(line.rstrip()) > 0:
-                sys.stdout.write(line)
+                ecsub.tools.info_message (self.cluster_name, no, line)
 
     def check_awsconfigure(self):
         if ecsub.aws_config.region_to_location(self.aws_region) == None:
-            print(ecsub.tools.error_message (self.cluster_name, None, "region '%s' can not be used in ecsub." % (self.aws_region)))
+            ecsub.tools.error_message (self.cluster_name, None, "region '%s' can not be used in ecsub." % (self.aws_region), self.log_fp)
             return False
         
         return True
     
     def check_file(self, path, no = None):
         
-        print(ecsub.tools.info_message (self.cluster_name, no, "check s3-path '%s'..." % (path)))
+        ecsub.tools.info_message (self.cluster_name, no, "check s3-path '%s'..." % (path), self.log_fp)
         
         option = ""
         if ecsub.tools.is_request_payer_bucket(path, self.request_payer):
@@ -123,17 +127,17 @@ class Aws_ecsub_control:
         response = self._subprocess_communicate(cmd)
     
         if response == "":
-            print(ecsub.tools.error_message (self.cluster_name, no, "s3-path '%s' is invalid." % (path)))
+            ecsub.tools.error_message (self.cluster_name, no, "s3-path '%s' is invalid." % (path), self.log_fp)
             return False
     
         find = False
         for r in response.split("\n"):
             if r.split(" ")[-1].rstrip("/") == os.path.basename(path):
-                print(ecsub.tools.info_message (self.cluster_name, no, "check s3-path '%s'...ok" % (path)))
+                ecsub.tools.info_message (self.cluster_name, no, "check s3-path '%s'...ok" % (path), self.log_fp)
                 find = True
                 break
         if find == False:
-            print(ecsub.tools.error_message (self.cluster_name, no, "s3-path '%s' is invalid." % (path)))
+            ecsub.tools.error_message (self.cluster_name, no, "s3-path '%s' is invalid." % (path), self.log_fp)
             return False
         
         return True
@@ -148,7 +152,7 @@ class Aws_ecsub_control:
                     result = True
 
             except Exception as e:
-                print(ecsub.tools.error_message (cluster_name, None, e))
+                ecsub.tools.error_message (cluster_name, None, e, self.log_fp)
                 
             return result
         
@@ -160,7 +164,7 @@ class Aws_ecsub_control:
                     result = True
                     
             except Exception as e:
-                print(ecsub.tools.error_message (cluster_name, None, e))
+                ecsub.tools.error_message (cluster_name, None, e, self.log_fp)
                 
             return result
             
@@ -235,7 +239,7 @@ class Aws_ecsub_control:
         try:
             obj = json.load(open(json_file))
         except Exception:
-            #print(ecsub.tools.error_message (self.cluster_name, None, e))
+            #ecsub.tools.error_message (self.cluster_name, None, e))
             return None
         return obj
         
@@ -245,7 +249,7 @@ class Aws_ecsub_control:
             if len(response["KeyPairs"]) > 0:
                 return True
         except Exception as e:
-            print(ecsub.tools.error_message (self.cluster_name, None, e))
+            ecsub.tools.error_message (self.cluster_name, None, e, self.log_fp)
             
         return False  
         
@@ -268,7 +272,7 @@ class Aws_ecsub_control:
             self.aws_key_auto = True
             return True
         
-        print(ecsub.tools.error_message (self.cluster_name, None, "Failure to create key pair."))
+        ecsub.tools.error_message (self.cluster_name, None, "Failure to create key pair.", self.log_fp)
         return False
         
     def set_security_group(self):
@@ -280,7 +284,7 @@ class Aws_ecsub_control:
                     return True
             except Exception:
                 pass
-            print(ecsub.tools.warning_message (self.cluster_name, None, "SecurityGroupId '%s' is invalid." % (self.aws_security_group_id)))
+            ecsub.tools.warning_message (self.cluster_name, None, "SecurityGroupId '%s' is invalid." % (self.aws_security_group_id), self.log_fp)
             
         try:
             response = boto3.client('ec2').describe_security_groups(GroupNames=["default"])
@@ -290,7 +294,7 @@ class Aws_ecsub_control:
         except Exception:
             pass
 
-        print(ecsub.tools.error_message (self.cluster_name, None, "Default SecurityGroupId is not exist."))
+        ecsub.tools.error_message (self.cluster_name, None, "Default SecurityGroupId is not exist.", self.log_fp)
         return False
         
     def create_cluster(self):
@@ -329,8 +333,8 @@ class Aws_ecsub_control:
                 AWS_REGION = self.aws_region,
                 IMAGE_NAME = self.image)
 
-        #print(ecsub.tools.info_message (self.cluster_name, None, "EcsTaskRole: %s" % (ECSTASKROLE)))
-        #print(ecsub.tools.info_message (self.cluster_name, None, "DockerImage: %s" % (IMAGE_ARN)))
+        #ecsub.tools.info_message (self.cluster_name, None, "EcsTaskRole: %s" % (ECSTASKROLE)))
+        #ecsub.tools.info_message (self.cluster_name, None, "DockerImage: %s" % (IMAGE_ARN)))
         option = ""
         if ecsub.tools.is_request_payer_bucket(self.s3_runsh, self.request_payer):
             option = "--request-payer requester "
@@ -539,7 +543,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                     return True
                 self._subprocess_call(cmd, no)
     
-        print(ecsub.tools.error_message (self.cluster_name, no, "Failure run instance."))
+        ecsub.tools.error_message (self.cluster_name, no, "Failure run instance.", self.log_fp)
         return False
     
     def run_instances_ondemand (self, no):
@@ -640,17 +644,17 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                     for key2 in obj["terms"]["OnDemand"][key1]["priceDimensions"].keys():
                         values.append(obj["terms"]["OnDemand"][key1]["priceDimensions"][key2]["pricePerUnit"]["USD"])
         except Exception as e:
-            print (e)
-            print(ecsub.tools.error_message (self.cluster_name, no, "instance-type %s can not be used in region '%s'." % (self.task_param[no]["aws_ec2_instance_type"], self.aws_region)))
+            ecsub.tools.error_message (self.cluster_name, no, e, self.log_fp)
+            ecsub.tools.error_message (self.cluster_name, no, "instance-type %s can not be used in region '%s'." % (self.task_param[no]["aws_ec2_instance_type"], self.aws_region), self.log_fp)
             return 0
         
         values.sort()
         if len(values) > 0:
-            print(ecsub.tools.info_message (self.cluster_name, no, "Instance Type: %s, Ondemand Price: %s USD" % (self.task_param[no]["aws_ec2_instance_type"], values[-1])))
+            ecsub.tools.info_message (self.cluster_name, no, "Instance Type: %s, Ondemand Price: %s USD" % (self.task_param[no]["aws_ec2_instance_type"], values[-1]), self.log_fp)
             self.task_param[no]["od_price"] = float(values[-1])
             return True
         
-        print(ecsub.tools.error_message (self.cluster_name, no, "instance-type %s can not be used in region '%s'." % (self.task_param[no]["aws_ec2_instance_type"], self.aws_region)))
+        ecsub.tools.error_message (self.cluster_name, no, "instance-type %s can not be used in region '%s'." % (self.task_param[no]["aws_ec2_instance_type"], self.aws_region), self.log_fp)
         return 0
     
     def set_spot_price (self, no):
@@ -673,7 +677,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                     spot_prices[az] = []
                 spot_prices[az].append(float(his['SpotPrice']))
         except Exception as e:
-            print (e)                
+            ecsub.tools.error_message (self.cluster_name, no, e, self.log_fp)
             return False
     
         price = {"az": "", "price": -1}
@@ -684,16 +688,16 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                 price["az"] = key
 
         if price["price"] < 0:
-            print(ecsub.tools.error_message (self.cluster_name, no, "failure describe_spot_price_history."))
+            ecsub.tools.error_message (self.cluster_name, no, "failure describe_spot_price_history.", self.log_fp)
             return False
         
         if price["price"] > self.task_param[no]["od_price"] * 0.98:
-            print(ecsub.tools.error_message (self.cluster_name, no, "spot price %f is close to ondemand price %f." % (price["price"], self.task_param[no]["od_price"])))
+            ecsub.tools.error_message (self.cluster_name, no, "spot price %f is close to ondemand price %f." % (price["price"], self.task_param[no]["od_price"]), self.log_fp)
             return False
         
         self.task_param[no]["spot_price"] = price["price"]
         self.task_param[no]["spot_az"] = price["az"]
-        print(ecsub.tools.info_message (self.cluster_name, no, "Spot Price: %s USD, Availality Zone: %s" % (price["price"], price["az"])))
+        ecsub.tools.info_message (self.cluster_name, no, "Spot Price: %s USD, Availality Zone: %s" % (price["price"], price["az"]), self.log_fp)
         return True
     
     def _describe_spot_instances(self, no, request_id = None, instance_id = None):
@@ -778,7 +782,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         try:
             request_id = log["SpotInstanceRequests"][0]["SpotInstanceRequestId"]
         except Exception:
-            print(ecsub.tools.error_message (self.cluster_name, no, "Failure request-spot-instances."))
+            ecsub.tools.error_message (self.cluster_name, no, "Failure request-spot-instances.", self.log_fp)
             return None
         
         for i in range(3):
@@ -801,11 +805,12 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                     )
                     self._subprocess_call(cmd, no)
                 else:
-                    print(ecsub.tools.error_message (self.cluster_name, no, "Failure request-spot-instances. [Status] %s [Code] %s [Message] %s" % 
+                    ecsub.tools.error_message (self.cluster_name, no, "Failure request-spot-instances. [Status] %s [Code] %s [Message] %s" % 
                         (response['State'],
                          response['Status']['Code'],
-                         response['Status']['Message'])
-                    ))
+                         response['Status']['Message']),
+                         self.log_fp
+                    )
                     break
             except Exception:
                 break
@@ -886,7 +891,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             if resource["name"] == "CPU":
                 task_vcpu = int(math.floor(resource['integerValue']/1000))
                 if task_vcpu == 0:
-                    print(ecsub.tools.error_message(self.cluster_name, no, "remainingResources(CPU): %d" % (resource["integerValue"])))
+                    ecsub.tools.error_message(self.cluster_name, no, "remainingResources(CPU): %d" % (resource["integerValue"]), self.log_fp)
                     return (exit_code, None)
             elif resource["name"] == "MEMORY":
                 task_memory = int(math.floor(resource['integerValue']/100) * 100)
@@ -942,7 +947,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         (log, err_msg) = self._check_memory(log_file)
         if log == None:
             for msg in err_msg:
-                print (ecsub.tools.warning_message (self.cluster_name, no, msg))
+                ecsub.tools.warning_message (self.cluster_name, no, msg, self.log_fp)
             
             log_file_retry = self._log_path("start-task-retry.%03d" % (no))
             cmd = cmd_template.format(
@@ -958,7 +963,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             (log, err_msg) = self._check_memory(log_file_retry)
             if log == None:
                 for msg in err_msg:
-                    print (ecsub.tools.error_message (self.cluster_name, no, msg))
+                    ecsub.tools.error_message (self.cluster_name, no, msg, self.log_fp)
                 return (exit_code, None)
 
         # get instance-ID from task-ID
@@ -979,7 +984,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         self._subprocess_call(cmd, no)
         log = self._json_load(log_file)
         if instance_id != log["containerInstances"][0]["ec2InstanceId"]:
-            print (ecsub.tools.error_message (self.cluster_name, no, "%s != %s" % (instance_id, log["containerInstances"][0]["ec2InstanceId"])))
+            ecsub.tools.error_message (self.cluster_name, no, "%s != %s" % (instance_id, log["containerInstances"][0]["ec2InstanceId"]), self.log_fp)
         
         # get log-path
         log_html_template = "https://{region}.console.aws.amazon.com/cloudwatch/home" \
@@ -991,7 +996,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             log_group_name = self.log_group_name,
             task_id = task_arn.split("/")[1]
         )
-        print (ecsub.tools.message (self.cluster_name, no, [{"text": " For detail, see log-file: "}, {"text": log_html, "color": ecsub.tools.get_title_color(no)}]))
+        ecsub.tools.message (self.cluster_name, no, [{"text": " For detail, see log-file: "}, {"text": log_html, "color": ecsub.tools.get_title_color(no)}], self.log_fp)
 
         # set Name to instance
         instanceName = "{cluster_name}.{I}".format(cluster_name = self.cluster_name, I = no)
@@ -1007,6 +1012,28 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             {"InstanceId": instance_id, "InstanceName": instanceName},
             open(self._log_path("create-tags.%03d" % (no)), "w")
         )
+        
+        log_file = self._log_path("describe-tasks.%03d" % (no))
+        appendex = {
+            "log": log_html,
+            "instance_type": self.task_param[no]["aws_ec2_instance_type"],
+            "disk_size": self.aws_ec2_instance_disk_size,
+            "no": no,
+            "instance_id": instance_id,
+            "subnet_id": subnet_id,
+            "log_local": log_file,
+        }
+        
+        def support_datetime_default(o):
+            if isinstance(o, datetime.datetime):
+                return '%04d/%02d/%02d %02d:%02d:%02d %s' % (o.year, o.month, o.day, o.hour, o.minute, o.second, o.tzname())
+            raise TypeError(repr(o) + " is not JSON serializable")
+            
+        if self.fly_away:
+            response = {}
+            response["appendex"] = appendex
+            json.dump(response, open(log_file, "w"), default=support_datetime_default, indent=4, separators=(',', ': '))
+            return (0, log_file)
         
         # wait to task-stop
         cmd_template = "{setx};aws ecs wait tasks-stopped --tasks {TASK_ARN} --cluster {CLUSTER_ARN}"
@@ -1034,37 +1061,23 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                 tasks=[task_arn]
             )
 
-        # check exit code
-        log_file = self._log_path("describe-tasks.%03d" % (no))
-
-        response["tasks"][0]["log"] = log_html
-        response["tasks"][0]["instance_type"] = self.task_param[no]["aws_ec2_instance_type"]
-        response["tasks"][0]["disk_size"] = self.aws_ec2_instance_disk_size
-        response["tasks"][0]["no"] = no
-        response["tasks"][0]["instance_id"] = instance_id
-        response["tasks"][0]["subnet_id"] = subnet_id
-        response["tasks"][0]["log_local"] = log_file
-                
-        def support_datetime_default(o):
-            if isinstance(o, datetime.datetime):
-                return '%04d/%02d/%02d %02d:%02d:%02d %s' % (o.year, o.month, o.day, o.hour, o.minute, o.second, o.tzname())
-            raise TypeError(repr(o) + " is not JSON serializable")
-
+        response["appendex"] = appendex
         json.dump(response, open(log_file, "w"), default=support_datetime_default, indent=4, separators=(',', ': '))
         
+        # check exit code
         #exit_code = 1
         if "containers" in response["tasks"][0]:
             if "exitCode" in response["tasks"][0]["containers"][0]:
                 exit_code = response["tasks"][0]["containers"][0]["exitCode"]
-                print (ecsub.tools.info_message (self.cluster_name, no, "tasks-stopped with [%d]" % (exit_code)))
+                ecsub.tools.info_message (self.cluster_name, no, "tasks-stopped with [%d]" % (exit_code), self.log_fp)
 
             if "reason" in response["tasks"][0]["containers"][0]:
                 if exit_code != 0:
-                    print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (response["tasks"][0]["containers"][0]["reason"])))
+                    ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (response["tasks"][0]["containers"][0]["reason"]), self.log_fp)
 
         if "stoppedReason" in response["tasks"][0]:
             if exit_code != 0:
-                print (ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (response["tasks"][0]["stoppedReason"])))
+                ecsub.tools.error_message (self.cluster_name, no, "An error occurred: %s" % (response["tasks"][0]["stoppedReason"]), self.log_fp)
 
         # check spot insatance was canceled?
         if self.task_param[no]["spot"]:
@@ -1141,19 +1154,6 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         
         if len(instance_ids) > 0:
             self.terminate_instances (" ".join(instance_ids))
-#            import math
-#            for i in range(int(math.ceil(len(instance_ids)/1000))):
-#                start = i * 1000
-#                end = start + 999
-#                if end > (len(instance_ids) - 1):
-#                    end = len(instance_ids) - 1
-#                
-#                if start == end:
-#                    print("%d,%d,%s" % (start,end,instance_ids[start]))
-#                    self.terminate_instances (instance_ids[start])
-#                else:
-#                    print("%d,%d,%s" % (start,end," ".join(instance_ids[start:end])))
-#                    self.terminate_instances (" ".join(instance_ids[start:end]))
         
         # cancel_spot_instance_requests
         req_ids = []

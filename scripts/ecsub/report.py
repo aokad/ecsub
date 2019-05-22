@@ -156,7 +156,7 @@ def _load_logs(params, task_logs, dic_info):
         }
         if tkey in task_logs:
             tlog = task_logs[tkey]
-            task = json.load(open(tlog))["tasks"][0]
+            task = json.load(open(tlog))["appendex"][0]
             for ckey in info.keys():
                 if ckey == "exitCode":
                     if "exitCode" in task["containers"][0]:

@@ -115,18 +115,18 @@ def _download_metrics(params, no):
                 start_date = start_date1
             f.write(text)
 
-        print (ecsub.tools.info_message(params["title"], no, "downloaded %s %s %s" % (
+        ecsub.tools.info_message(params["title"], no, "downloaded %s %s %s" % (
             params['instanceName'], 
             params['metric'], 
             date.strftime("%Y/%m/%d")
-        )))
+        ))
         
     f.close()
     return
     
 def main(params, no):
     
-    print (ecsub.tools.info_message(params["title"], no, "=== download metrics files start ==="))
+    ecsub.tools.info_message(params["title"], no, "=== download metrics files start ===")
         
     for instance in params["instances"]:
         for metric in params["metrics"]:
@@ -142,7 +142,7 @@ def main(params, no):
             }
             _download_metrics(partial_params, no)
 
-    print (ecsub.tools.info_message(params["title"], no, "=== download metrics files end ==="))
+    ecsub.tools.info_message(params["title"], no, "=== download metrics files end ===")
 
 def entry_point(wdir, no = None):
     import json

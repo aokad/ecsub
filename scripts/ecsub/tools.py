@@ -13,7 +13,7 @@ import dateutil
 def get_title_color (no):
     return ecsub.ansi.colors.roll_list[no % len(ecsub.ansi.colors.roll_list)]
         
-def message (title, no, messages):
+def message (title, no, messages, fp):
     text = "%s " % (str(datetime.datetime.now()))
     if no != None:     
         text += ecsub.ansi.colors.paint("[%s:%03d]" % (title, no), get_title_color(no))
@@ -26,16 +26,19 @@ def message (title, no, messages):
         else:
             text += m["text"]
 
-    return text
+    if fp == None:
+        print (text)
+    else:
+        fp.write(text + "\n")
 
-def warning_message (title, no, text):
-    return message (title, no, [{"text": " [WARNING] %s" % (text), "color": ecsub.ansi.colors.WARNING}])
+def warning_message (title, no, text, fp = None):
+    message (title, no, [{"text": " [WARNING] %s" % (text), "color": ecsub.ansi.colors.WARNING}], fp)
 
-def error_message (title, no, text):
-    return message (title, no, [{"text": " [ERROR] %s" % (text), "color": ecsub.ansi.colors.FAIL}])
+def error_message (title, no, text, fp = None):
+    message (title, no, [{"text": " [ERROR] %s" % (text), "color": ecsub.ansi.colors.FAIL}], fp)
 
-def info_message (title, no, text):
-    return message (title, no, [{"text": " %s" % (text)}])
+def info_message (title, no, text, fp = None):
+    message (title, no, [{"text": " %s" % (text)}], fp)
 
 def base64_encode(text):
     import six
