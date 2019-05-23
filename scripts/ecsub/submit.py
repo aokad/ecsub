@@ -318,7 +318,7 @@ class Submit:
         return 1
     
     def main(self, params):
-        task_params =  self.preparation(self, params)
+        task_params =  self.preparation(params)
         if task_params == None:
             return 1
         
