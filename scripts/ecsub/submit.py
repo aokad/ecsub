@@ -24,6 +24,8 @@ class Submit:
         self.aws_instance = None
         self.log_fp = None
         
+        self.fly_away = False
+        
     def _run_task(self, no, instance_id):
         
         system_error = False
@@ -38,7 +40,8 @@ class Submit:
         except Exception as e:
             ecsub.tools.error_message (self.aws_instance.cluster_name, no, e, self.log_fp)
         
-        self.aws_instance.terminate_instances(instance_id, no)
+        if not self.fly_away:
+            self.aws_instance.terminate_instances(instance_id, no)
         
         return (exit_code, task_log, system_error)
     
@@ -84,7 +87,9 @@ class Submit:
                     break
     
                 (exit_code, task_log, system_error) = self._run_task( no, instance_id)
-                self.aws_instance.cancel_spot_instance_requests (no = no, instance_id = instance_id)
+                
+                if not self.fly_away:
+                    self.aws_instance.cancel_spot_instance_requests (no = no, instance_id = instance_id)
                     
                 if system_error:
                     continue
@@ -211,6 +216,7 @@ class Submit:
         os.makedirs(params["wdir"] + "/conf")
         os.makedirs(params["wdir"] + "/script")
     
+        params["fly_away"] = self.fly_away
         self.aws_instance = ecsub.aws.Aws_ecsub_control(params, len(task_params["tasks"]), self.log_fp)
         
         # check task-param
@@ -296,7 +302,9 @@ class Submit:
                 if process.exitcode != None:
                     exitcodes.append(process.exitcode)
             
-            self.aws_instance.clean_up()
+            if not self.fly_away:
+                self.aws_instance.clean_up()
+                
             # SUCCESS?
             if [0] == list(set(exitcodes)):
                 return 0
@@ -330,33 +338,8 @@ class Submit:
     
 def entry_point(args, unknown_args):
     
-    params = {
-        "wdir": args.wdir,
-        "image": args.image,
-        "shell": args.shell,
-        "use_amazon_ecr": args.use_amazon_ecr,
-        "script": args.script,
-        "tasks": args.tasks,
-        "task_name": args.task_name,
-        "aws_ec2_instance_type": args.aws_ec2_instance_type,
-        "aws_ec2_instance_type_list": args.aws_ec2_instance_type_list,
-        "aws_ec2_instance_disk_size": args.disk_size,
-        "aws_s3_bucket": args.aws_s3_bucket,
-        "aws_security_group_id": args.aws_security_group_id,
-        "aws_key_name": args.aws_key_name,
-        "aws_subnet_id": args.aws_subnet_id,
-        "spot": args.spot,
-        "retry_od": args.retry_od,
-        "setx": "set -x",
-        "setup_container_cmd": args.setup_container_cmd,
-        "dind": args.dind,
-        "processes": args.processes,
-        "request_payer": args.request_payer_bucket,
-        "ignore_location": args.ignore_location,
-        "fly_away": args.fly_away,
-    }
     submit_instance = Submit()
-    return submit_instance.main(params)
+    return submit_instance.main(ecsub.params.args_to_obj(args))
     
 if __name__ == "__main__":
     pass
