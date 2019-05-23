@@ -11,29 +11,30 @@ def summary_to_obj(path):
     
     summary = json.load(open(path))
     
-    params = {
+    conf = {
         "setx": "set -x",
     }
-    
-    params["aws_key_name"] = summary["KeyName"]
-    params["aws_security_group_id"] = summary["SecurityGroupId"]
-    params["cluster_name"] = summary["ClusterName"]
-    params["shell"]  = summary["Shell"]
-    params["aws_ec2_instance_disk_size"] = summary["Ec2InstanceDiskSize"]
-    params["image"] = summary["Image"]
-    params["use_amazon_ecr"] = summary["UseAmazonEcr"]
-    params["spot"] = summary["Spot"]
+    inst = {}
+
+    inst["aws_key_name"] = summary["KeyName"]
+    inst["aws_security_group_id"] = summary["SecurityGroupId"]
+    conf["cluster_name"] = summary["ClusterName"]
+    conf["shell"]  = summary["Shell"]
+    conf["aws_ec2_instance_disk_size"] = summary["Ec2InstanceDiskSize"]
+    conf["image"] = summary["Image"]
+    conf["use_amazon_ecr"] = summary["UseAmazonEcr"]
+    conf["spot"] = summary["Spot"]
     
     # no use
-    params["aws_ec2_instance_type_list"] = ['']
-    params["aws_ec2_instance_type"] = ""
-    params["aws_subnet_id"] = ""
-    params["retry_od"] = False
-    params["request_payer"] = []
-    params["setup_container_cmd"] = ""
-    params["dind"] = False
+    conf["aws_ec2_instance_type_list"] = ['']
+    conf["aws_ec2_instance_type"] = ""
+    inst["aws_subnet_id"] = ""
+    conf["retry_od"] = False
+    conf["request_payer"] = []
+    conf["setup_container_cmd"] = ""
+    conf["dind"] = False
     
-    return params
+    return (conf, inst)
 
 def args_to_obj(args):
     conf = {
@@ -119,48 +120,45 @@ def save_summary_file(job_summary, print_cost):
     
     log_file = "%s/log/summary.%03d.log" % (job_summary["Wdir"], job_summary["No"]) 
     json.dump(job_summary, open(log_file, "w"), indent=4, separators=(',', ': '), sort_keys=True)
+ 
+class Config():
+    def __init__ (self, args):
+        self.wdir = args.wdir
+        self.image = args.image
+        self.shell = args.shell
+        self.use_amazon_ecr = args.use_amazon_ecr
+        self.script = args.script
+        self.tasks = args.tasks
+        self.task_name = args.task_name
+        self.aws_ec2_instance_type = args.aws_ec2_instance_type
+        self.aws_ec2_instance_type_list = args.aws_ec2_instance_type_list
+        self.aws_ec2_instance_disk_size = args.disk_size
+        self.aws_s3_bucket = args.aws_s3_bucket
+        self.aws_security_group_id = args.aws_security_group_id
+        self.aws_key_name = args.aws_key_name
+        self.aws_subnet_id = args.aws_subnet_id
+        self.spot = args.spot
+        self.retry_od = args.retry_od
+        self.setx = "set -x"
+        self.setup_container_cmd = args.setup_container_cmd
+        self.dind = args.dind
+        self.processes = args.processes
+        self.request_payer = args.request_payer_bucket
+        self.ignore_location = args.ignore_location
     
+class Resource():
+    def __init__ (self, summary):
+        self.aws_key_name = ""
+        self.aws_security_group_id = ""
+        self.aws_subnet_id = ""
+        if summary != None:
+            self.aws_key_name = summary["KeyName"]
+            self.aws_security_group_id = summary["SecurityGroupId"]
     
 class Parameter():
-    class conf():
-        def __init__ (self, conf):
-            self = {
-        "wdir": args.wdir,
-        "image": args.image,
-        "shell": args.shell,
-        "use_amazon_ecr": args.use_amazon_ecr,
-        "script": args.script,
-        "tasks": args.tasks,
-        "task_name": args.task_name,
-        "aws_ec2_instance_type": args.aws_ec2_instance_type,
-        "aws_ec2_instance_type_list": args.aws_ec2_instance_type_list,
-        "aws_ec2_instance_disk_size": args.disk_size,
-        "aws_s3_bucket": args.aws_s3_bucket,
-        "aws_security_group_id": args.aws_security_group_id,
-        "aws_key_name": args.aws_key_name,
-        "aws_subnet_id": args.aws_subnet_id,
-        "spot": args.spot,
-        "retry_od": args.retry_od,
-        "setx": "set -x",
-        "setup_container_cmd": args.setup_container_cmd,
-        "dind": args.dind,
-        "processes": args.processes,
-        "request_payer": args.request_payer_bucket,
-        "ignore_location": args.ignore_location
-    }
     def __init__(self, conf, resource = None):
-        self.CONF = params
-        self.resource = {}
-        
-    def resource_temp():
-        return {
-            "aws_key_name": "",
-            "aws_security_group_id": "",
-            params["aws_ec2_instance_disk_size"] = summary["Ec2InstanceDiskSize"]
-    params["image"] = summary["Image"]
-    params["use_amazon_ecr"] = summary["UseAmazonEcr"]
-    params["spot"] = summary["Spot"]
-        }
+        self.CONF = Config(conf)
+        self.resource = Resource(resource)
         
 def main():
     pass
