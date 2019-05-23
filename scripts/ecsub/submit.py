@@ -152,8 +152,8 @@ class Submit:
     
         ecsub.pre_submit.save_summary_file(job_summary, True)
         exit (exit_code)
-        
-    def main(self, params):
+
+    def preparation(self, params):
         
         # set cluster_name
         params["cluster_name"] = params["task_name"]
@@ -175,11 +175,11 @@ class Submit:
         elif len(params["aws_ec2_instance_type_list"]) > 0:
             if not params["spot"]:
                 ecsub.tools.error_message (params["cluster_name"], None, "--aws-ec2-instance-type-list option is not support with ondemand-instance mode.", self.log_fp)
-                return 1
+                return None
             
         else:
             ecsub.tools.error_message (params["cluster_name"], None, "One of --aws-ec2-instance-type option and --aws-ec2-instance-type-list option is required.", self.log_fp)
-            return 1
+            return None
         
         # "request_payer": 
         request_payer = params["request_payer"].replace(" ", "")
@@ -191,11 +191,11 @@ class Submit:
         # read tasks file
         task_params = ecsub.pre_submit.read_tasksfile(params["tasks"], params["cluster_name"])
         if task_params == None:
-            return 1
+            return None
         
         if task_params["tasks"] == []:
             ecsub.tools.info_message (params["cluster_name"], None, "task file is empty.", self.log_fp)
-            return 0
+            return task_params
         
         subdir = params["cluster_name"]
         
@@ -211,11 +211,11 @@ class Submit:
         os.makedirs(params["wdir"] + "/conf")
         os.makedirs(params["wdir"] + "/script")
     
-        self.aws_instance = ecsub.aws.Aws_ecsub_control(params, len(task_params["tasks"]))
+        self.aws_instance = ecsub.aws.Aws_ecsub_control(params, len(task_params["tasks"]), self.log_fp)
         
         # check task-param
         if not self.aws_instance.check_awsconfigure():
-            return 1
+            return None
     
         # check s3-files path
         (regions, invalid_pathes) = ecsub.pre_submit.check_inputfiles(self.aws_instance, task_params, params["cluster_name"], params["request_payer"], params["aws_s3_bucket"])
@@ -224,12 +224,12 @@ class Submit:
                 ecsub.tools.warning_message (params["cluster_name"], None, "your task uses multipule regions '%s'." % (",".join(regions)), self.log_fp)
             else:
                 ecsub.tools.error_message (params["cluster_name"], None, "your task uses multipule regions '%s'." % (",".join(regions)), self.log_fp)
-                return 1
+                return None
             
         for r in invalid_pathes:
             ecsub.tools.error_message (params["cluster_name"], None, "input '%s' is not access." % (r), self.log_fp)
         if len(invalid_pathes)> 0:
-            return 1
+            return None
         
         # write task-scripts, and upload to S3
         local_script_dir = params["wdir"] + "/script"
@@ -243,7 +243,11 @@ class Submit:
                        params["shell"],
                        params["request_payer"]):
             ecsub.tools.error_message (params["cluster_name"], None, "failure upload files to s3 bucket: %s." % (params["aws_s3_bucket"]), self.log_fp)
-            return 1
+            return None
+        
+        return task_params
+    
+    def run_procs(self, params, task_params):
         
         # run purocesses
         process_list = []
@@ -312,6 +316,17 @@ class Submit:
             self.aws_instance.clean_up()
         
         return 1
+    
+    def main(self, params):
+        task_params =  self.preparation(self, params)
+        if task_params == None:
+            return 1
+        
+        if task_params["tasks"] == []:
+            return 0
+        
+        return self.run_procs(params, task_params)
+        
     
 def entry_point(args, unknown_args):
     
