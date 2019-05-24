@@ -23,7 +23,7 @@ class FlyAway(ecsub.submit.Submit):
     
     def take_off(self, args):
         
-        params = ecsub.params.summary_to_obj(args.summary_path)   
+        params = ecsub.params.summary_to_obj(args.summary_path)
         task_params =  self.preparation(params)
         if task_params == None:
             return 1

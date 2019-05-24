@@ -8,7 +8,6 @@ Created on Wed May 22 12:11:29 2019
 
 import boto3
 import os
-import json
 import ecsub.aws
 import ecsub.aws_config
 import ecsub.tools
@@ -97,9 +96,9 @@ df -h
     
 def write_s3_scripts(task_params, payer_buckets, setenv, downloader, uploader, no):
    
-    env_text = ""
-    dw_text = ""
-    up_text = ""
+    env_text = "set -x \n"
+    dw_text = "set -x \n"
+    up_text = "set -x \n"
     
     for i in range(len(task_params["tasks"][no])):
         
@@ -165,7 +164,7 @@ def check_inputfiles_collect(files, dirs, cluster_name):
     s3 = boto3.resource('s3')
     for key in tree:
         bucket = s3.Bucket(key)
-        print (ecsub.tools.info_message (cluster_name, None, "checking s3 bucket '%s'..." % (key)))
+        ecsub.tools.info_message (cluster_name, None, "checking s3 bucket '%s'..." % (key))
         for obj in bucket.objects.all():
             if obj.key in tree[key]["files"]:
                 tree[key]["files"].remove(obj.key)

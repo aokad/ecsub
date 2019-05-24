@@ -1,0 +1,6 @@
+*.pyc
+ecsub
+dist
+ecsub.egg-info
+build
+__pycache__

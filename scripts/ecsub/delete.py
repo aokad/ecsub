@@ -39,7 +39,7 @@ def main(params):
     params["setup_container_cmd"] = ""
     params["dind"] = False
     
-    aws_instance = ecsub.aws.Aws_ecsub_control(params, 1)
+    aws_instance = ecsub.aws.Aws_ecsub_control(params, 1, None)
     aws_instance.aws_key_auto = summary["AutoKey"]
     aws_instance.cluster_arn = summary["ClusterArn"]
     aws_instance.task_definition_arn = summary["TaskDefinitionAn"]

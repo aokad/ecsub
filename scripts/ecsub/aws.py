@@ -18,7 +18,7 @@ import glob
 
 class Aws_ecsub_control:
 
-    def __init__(self, params, task_num, log_fp):
+    def __init__(self, params, task_num, log_fp, fly_away=False):
         
         self.aws_accountid = self._get_aws_account_id()
         self.aws_region = self._get_region()
@@ -74,7 +74,7 @@ class Aws_ecsub_control:
             })
     
         self.log_fp = log_fp
-        self.fly_away = params["fly_away"]
+        self.fly_away = fly_away
         
     def _subprocess_communicate (self, cmd):
         response = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).communicate()[0]
@@ -105,7 +105,7 @@ class Aws_ecsub_control:
 #                ecsub.tools.info_message (self.cluster_name, None, line)
 #                
             if len(line.rstrip()) > 0:
-                ecsub.tools.info_message (self.cluster_name, no, line)
+                ecsub.tools.info_message (self.cluster_name, no, line.rstrip())
 
     def check_awsconfigure(self):
         if ecsub.aws_config.region_to_location(self.aws_region) == None:

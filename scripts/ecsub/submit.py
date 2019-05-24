@@ -17,6 +17,7 @@ import ecsub.aws_config
 import ecsub.tools
 import ecsub.metrics
 import ecsub.pre_submit
+import ecsub.params
 
 class Submit:
 
@@ -128,12 +129,12 @@ class Submit:
             "Wdir": self.aws_instance.wdir,
             "Jobs":[]
         }
-        ecsub.pre_submit.save_summary_file(job_summary, False)
+        ecsub.params.save_summary_file(job_summary)
     
         if spot:
             start_t = datetime.datetime.now()
             (exit_code, task_log, retry) = self.submit_task_spot(no)
-            job_summary["Jobs"].append(ecsub.pre_submit.set_job_info(
+            job_summary["Jobs"].append(ecsub.params.set_job_info(
                 self.aws_instance.task_param[no], start_t, datetime.datetime.now(), task_log, exit_code
             ))
             
@@ -141,13 +142,13 @@ class Submit:
                 start_t = datetime.datetime.now()
                 self.aws_instance.task_param[no]["aws_ec2_instance_type"] = self.aws_instance.aws_ec2_instance_type_list[0]
                 (exit_code, task_log) = self.submit_task_ondemand(no)
-                job_summary["Jobs"].append(ecsub.pre_submit.set_job_info(
+                job_summary["Jobs"].append(ecsub.params.set_job_info(
                     self.aws_instance.task_param[no], start_t, datetime.datetime.now(), task_log, exit_code
                 ))
         else:
             start_t = datetime.datetime.now()
             (exit_code, task_log) = self.submit_task_ondemand(no)
-            job_summary["Jobs"].append(ecsub.pre_submit.set_job_info(
+            job_summary["Jobs"].append(ecsub.params.set_job_info(
                 self.aws_instance.task_param[no], start_t, datetime.datetime.now(), task_log, exit_code
             ))
         
@@ -155,7 +156,7 @@ class Submit:
         job_summary["End"] = ecsub.tools.datetime_to_standardformat(datetime.datetime.now())
         ecsub.metrics.entry_point(self.aws_instance.wdir, no)
     
-        ecsub.pre_submit.save_summary_file(job_summary, True)
+        ecsub.params.save_summary_file(job_summary, print_cost = True, log_fp = self.log_fp)
         exit (exit_code)
 
     def preparation(self, params):
