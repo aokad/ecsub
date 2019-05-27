@@ -26,7 +26,7 @@ def read_tasksfile(tasks_file, cluster_name):
 
     for line in open(tasks_file).readlines():
         text = line.rstrip("\r\n")
-        if text == "":
+        if len(text.rstrip()) == 0:
             continue
         if header == []:
             for item in text.split("\t"):
