@@ -102,9 +102,9 @@ df -h
     
 def write_s3_scripts(task_params, payer_buckets, setenv, downloader, uploader, no):
    
-    env_text = ""
-    dw_text = ""
-    up_text = ""
+    env_text = "set -x\n"
+    dw_text = "set -x\n"
+    up_text = "set -x\n"
     
     for i in range(len(task_params["tasks"][no])):
         
