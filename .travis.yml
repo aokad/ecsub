@@ -4,10 +4,10 @@ language: python
 
 matrix:
   include:
-    - name: "Python 3.8"
-      python: 3.8-dev
-      dist: xenial
-      env: SUBMIT=0
+#    - name: "Python 3.8"
+#      python: 3.8-dev
+#      dist: xenial
+#      env: SUBMIT=0
     - name: "Python 3.7"
       python: 3.7
       dist: xenial
@@ -35,6 +35,7 @@ before_script:
    echo "output = ${AWS_DEFAULT_OUTPUT}" >> ~/.aws/config;
 
 script:
+  - pip install awscli boto3 pyyaml --upgrade
   - python setup.py build install
   - if [ ${SUBMIT} == 1 ]; then python setup.py test; fi
   - if [ ${SUBMIT} == 0 ]; then python -m unittest discover -s ./tests -p unit_tests_short.py; fi

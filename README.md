@@ -15,6 +15,7 @@
 Dependent packages are installed automatically.
 
 ```Bash
+pip install awscli boto3 pyyaml --upgrade
 git clone https://github.com/aokad/ecsub.git
 cd ecsub
 python setup.py build install
