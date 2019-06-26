@@ -3,7 +3,7 @@
 ## ecsub とは
 
 Amazon Elastic Container Servise (Amazon ECS) を使用したバッチジョブ実行エンジンです。  
-Amazon Elastic Compute Cloud (Amazon EC2) にインスタンスを作成して docker コンテナを構築しバッチジョブをじっこうします。  
+Amazon Elastic Compute Cloud (Amazon EC2) にインスタンスを作成して docker コンテナを構築しバッチジョブを実行します。  
 入出力ソースとして Amazon Simple Storage Service (Amazon S3) を使用することができます。  
 
 ## とりあえず実行する
@@ -19,6 +19,8 @@ ecsub submit \
 ```
 
 ## 実行中のログを確認する
+
+ecsub はタスクのログを AWSCoudwatch に保存します。
 
 ```
 2018-12-18 16:49:44.473816 [tasks-wordcount-1-qyD56:000] For detail, see log-file: https://ap-northeast-1.console.aws.amazon.com/cloudwatch/home?region=ap-northeast-1#logEventViewer:group=ecsub-tasks-wordcount-1-qyD56;stream=ecsub/tasks-wordcount-1-qyD56_task/330419b5-c48a-4483-bb1a-1c14d6625a04
@@ -97,3 +99,9 @@ ecsub submit \
 
 対応しているインスタンスタイプは "{ecsub}/scripts.ecsub/aws_config.py" の INSTANCE_TYPE で定義されています。
 
+### ecsub タスクのログで `left device is no space` エラー
+
+起動したインスタンスでディスクが不足しています。
+ディスクを増やして再度実行してください。
+
+ディスク用量は `ecsub submit` コマンドの `--disk` オプションで指定できます。単位は Gib です。
