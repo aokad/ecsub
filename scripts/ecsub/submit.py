@@ -154,8 +154,12 @@ class Submit:
         
         job_summary["SubnetId"] = self.aws_instance.aws_subnet_id
         job_summary["End"] = ecsub.tools.datetime_to_standardformat(datetime.datetime.now())
-        ecsub.metrics.entry_point(self.aws_instance.wdir, no)
-    
+        
+        files = ecsub.metrics.entry_point(self.aws_instance.wdir, no)
+        for metrics_file in files:
+            s3_file = "" % (task_params. os.basename(metrics_file))
+            self.aws_instance.s3_copy(metrics_file, s3_file, False, no)
+            
         ecsub.params.save_summary_file(job_summary, print_cost = True, log_fp = self.log_fp)
         exit (exit_code)
 
