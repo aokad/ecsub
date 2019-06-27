@@ -341,7 +341,7 @@ def main(params):
     for tkey in sorted(sorted_dic.keys()):
         _print(sorted_dic[tkey], header, info_wmax)
         
-def entry_point(args, unknown_args):
+def entry_point(args):
     
     begin = None
     if args.begin != "":

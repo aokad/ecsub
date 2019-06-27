@@ -48,7 +48,7 @@ def main(params):
     
     return 0
     
-def entry_point(args, unknown_args):
+def entry_point(args):
     
     params = {
         "wdir": args.wdir,

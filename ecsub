@@ -46,6 +46,32 @@ def main():
     submit_parser.add_argument("--request-payer-bucket", metavar = "bucket-name", help = "Aware that you will be charged for downloading objects in requester pays buckets. Split with ',' ", type = str, default = "")
     submit_parser.add_argument("--ignore-location", help = "Ignore differences in location", action = 'store_true')
     submit_parser.set_defaults(func = submit.entry_point)
+
+    ##########
+    # submit away
+    away_parser = subparsers.add_parser("away", help = "submit job, mode fly away")
+    away_parser.add_argument("--wdir", metavar = "path/to/dir", help = "output temporary data", type = str, default = "./")
+    away_parser.add_argument("--image", metavar = "docker/image:tag", help = "docker image", type = str, default = "python:2.7.14")
+    away_parser.add_argument("--use_amazon_ecr", help = "use_amazon_ecr", action = 'store_true')
+    away_parser.add_argument("--shell", metavar = "path/to/bash", help = "path to bash or ash in docker-container", type = str, default = "/bin/bash")
+    away_parser.add_argument("--setup-container-cmd", metavar = '"pip install awscli"', help = "awscli install command", type = str, default = "apt update; apt install -y python-pip; pip install awscli --upgrade; aws configure list")
+    away_parser.add_argument("--dind", help = "Docker in Docker?", action = 'store_true')
+    away_parser.add_argument("--script", metavar = "path/to/script.sh", help = "run script", type = str, required=True)
+    away_parser.add_argument("--tasks", metavar = "path/to/tasks.tsv", help = "parameters", type = str, required=True)
+    away_parser.add_argument("--task-name", metavar = "task-name", help = "submit name as AWS ECS cluster name", type = str, default = "")
+    away_parser.add_argument("--aws-s3-bucket", metavar = "s3://output/bucket", help = "AWS your S3 bucket", type = str, required=True)
+    away_parser.add_argument("--aws-ec2-instance-type", metavar = "t2.micro", help = "AWS instance type", type = str, default = "")
+    away_parser.add_argument("--aws-ec2-instance-type-list", metavar = "t3.micro,t2.micro", help = "AWS instance types, split with ',' ", type = str, default = "")
+    away_parser.add_argument("--disk-size", metavar = 22, help = "AWS disk size (GiB)", type = int, default = 22)
+    away_parser.add_argument("--processes", metavar = 20, help = "maximum multi processes", type = int, default = 20)
+    away_parser.add_argument("--aws-security-group-id", metavar = "sg-ab123456", help = "AWS your security_group_id", type = str, default = "")
+    away_parser.add_argument("--aws-key-name", metavar = "key-123ab", help = "AWS your key pair name", type = str, default = "")
+    away_parser.add_argument("--aws-subnet-id", metavar = "subnet-123456ab", help = "AWS subnet_id", type = str, default = "")
+    away_parser.add_argument("--spot", help = "[spot] use spot instance", action = 'store_true')
+    away_parser.add_argument("--retry-od", help = "[spot] In case of failure, retry on demand instance", action = 'store_true')
+    away_parser.add_argument("--request-payer-bucket", metavar = "bucket-name", help = "Aware that you will be charged for downloading objects in requester pays buckets. Split with ',' ", type = str, default = "")
+    away_parser.add_argument("--ignore-location", help = "Ignore differences in location", action = 'store_true')
+    away_parser.set_defaults(func = submit.entry_point_flyaway)
     
     ##########
     # report 
@@ -90,15 +116,9 @@ def main():
     if len(argv) < 1:
         argv = [""]
         
-    (known_args, unknown_args) = parser.parse_known_args(argv)
-    if len(unknown_args) > 0:
-        if '' in unknown_args:
-            unknown_args.remove('')
-        if len(unknown_args) > 0:
-            print ("This option is invalid.")
-            print (unknown_args)
+    args = parser.parse_args(argv)
     
-    return known_args.func(known_args, unknown_args)
+    return args.func(args)
     
 if __name__ == "__main__":
     print (">>> " + " ".join(sys.argv))

@@ -73,7 +73,9 @@ class Aws_ecsub_control:
                 "spot_az": "",
                 "spot_price": 0,
             })
-    
+        
+        self.flyaway = params["flyaway"]
+        
     def _subprocess_communicate (self, cmd):
         response = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).communicate()[0]
         if type(response) == type(b''):
@@ -1008,6 +1010,9 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             open(self._log_path("create-tags.%03d" % (no)), "w")
         )
         
+        if self.flyaway:
+            return (0, None)
+            
         # wait to task-stop
         cmd_template = "{setx};aws ecs wait tasks-stopped --tasks {TASK_ARN} --cluster {CLUSTER_ARN}"
 

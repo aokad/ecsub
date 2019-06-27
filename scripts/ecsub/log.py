@@ -313,11 +313,7 @@ def main(params):
     if params["download"] == False and  params["remove"] == False:
         print (ecsub.tools.warning_message(TITLE, None, "Set either --rm (remove) or --dw (download) or both."))
         
-def entry_point(args, unknown_args):
-    if len(unknown_args) > 0:
-        print (ecsub.tools.warning_message(TITLE, None, "Set the correct option."))
-        return
-        
+def entry_point(args):
     params = {
         "wdir": args.wdir,
         "prefix": args.prefix,

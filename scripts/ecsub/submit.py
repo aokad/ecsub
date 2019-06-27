@@ -209,7 +209,10 @@ def check_bucket_location(pathes):
     regions = []
     for bucket in sorted(list(set(buckets))):
         response = client.get_bucket_location(Bucket=bucket)
-        regions.append(response['LocationConstraint'])
+        if response['LocationConstraint'] == None:
+            print (ecsub.tools.warning_message (None, None, "Failue get_bucket_location '%s'..." % (bucket)))
+        else:
+            regions.append(response['LocationConstraint'])
     
     current_session = boto3.session.Session()
     regions.append(current_session.region_name)
@@ -309,6 +312,9 @@ def _run_task(aws_instance, no, instance_id):
     except Exception as e:
         print (ecsub.tools.error_message (aws_instance.cluster_name, no, e))
     
+    if aws_instance.flyaway and exit_code == 0:
+        return (exit_code, task_log, system_error)
+        
     aws_instance.terminate_instances(instance_id, no)
     
     return (exit_code, task_log, system_error)
@@ -355,6 +361,9 @@ def submit_task_spot(aws_instance, no):
                 break
 
             (exit_code, task_log, system_error) = _run_task(aws_instance, no, instance_id)
+            if aws_instance.flyaway and exit_code == 0:
+                break
+                
             aws_instance.cancel_spot_instance_requests (no = no, instance_id = instance_id)
                 
             if system_error:
@@ -452,7 +461,8 @@ def submit_task(aws_instance, no, task_params, spot):
         "Wdir": aws_instance.wdir,
         "Jobs":[]
     }
-    _save_summary_file(job_summary, False)
+    if aws_instance.flyaway == False:
+        _save_summary_file(job_summary, False)
 
     if spot:
         start_t = datetime.datetime.now()
@@ -477,9 +487,11 @@ def submit_task(aws_instance, no, task_params, spot):
     
     job_summary["SubnetId"] = aws_instance.aws_subnet_id
     job_summary["End"] = ecsub.tools.datetime_to_standardformat(datetime.datetime.now())
-    ecsub.metrics.entry_point(aws_instance.wdir, no)
-
-    _save_summary_file(job_summary, True)
+    
+    if aws_instance.flyaway == False:
+        ecsub.metrics.entry_point(aws_instance.wdir, no)
+        _save_summary_file(job_summary, True)
+       
     exit (exit_code)
     
 def main(params):
@@ -622,7 +634,9 @@ def main(params):
             if process.exitcode != None:
                 exitcodes.append(process.exitcode)
         
-        aws_instance.clean_up()
+        if params["flyaway"] == False:
+            aws_instance.clean_up()
+            
         # SUCCESS?
         if [0] == list(set(exitcodes)):
             return 0
@@ -643,7 +657,7 @@ def main(params):
     
     return 1
     
-def entry_point(args, unknown_args):
+def entry_point(args):
     
     params = {
         "wdir": args.wdir,
@@ -668,6 +682,36 @@ def entry_point(args, unknown_args):
         "processes": args.processes,
         "request_payer": args.request_payer_bucket,
         "ignore_location": args.ignore_location,
+        "flyaway": False,
+    }
+    return main(params)
+    
+def entry_point_flyaway(args):
+    
+    params = {
+        "wdir": args.wdir,
+        "image": args.image,
+        "shell": args.shell,
+        "use_amazon_ecr": args.use_amazon_ecr,
+        "script": args.script,
+        "tasks": args.tasks,
+        "task_name": args.task_name,
+        "aws_ec2_instance_type": args.aws_ec2_instance_type,
+        "aws_ec2_instance_type_list": args.aws_ec2_instance_type_list,
+        "aws_ec2_instance_disk_size": args.disk_size,
+        "aws_s3_bucket": args.aws_s3_bucket,
+        "aws_security_group_id": args.aws_security_group_id,
+        "aws_key_name": args.aws_key_name,
+        "aws_subnet_id": args.aws_subnet_id,
+        "spot": args.spot,
+        "retry_od": args.retry_od,
+        "setx": "set -x",
+        "setup_container_cmd": args.setup_container_cmd,
+        "dind": args.dind,
+        "processes": args.processes,
+        "request_payer": args.request_payer_bucket,
+        "ignore_location": args.ignore_location,
+        "flyaway": True,
     }
     return main(params)
     
