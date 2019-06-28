@@ -75,6 +75,9 @@ class Aws_ecsub_control:
             })
         
         self.flyaway = params["flyaway"]
+        self.env_options = []
+        if "env_options" in params:
+            self.env_options.extend(params["env_options"])
         
     def _subprocess_communicate (self, cmd):
         response = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).communicate()[0]
@@ -363,7 +366,7 @@ class Aws_ecsub_control:
                     "host": {"sourcePath": "/var/run/docker.sock"}
                 }
             )
-            
+        
         containerDefinitions = {
             "containerDefinitions": [
                 {
@@ -895,6 +898,27 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             else:
                 continue
 
+        environment = [
+            {
+                "name": "SCRIPT_SETENV_PATH",
+                "value": self.s3_setenv[no]
+            },
+            {
+                "name": "SCRIPT_DOWNLOADER_PATH",
+                "value": self.s3_downloader[no]
+            },
+            {
+                "name": "SCRIPT_UPLOADER_PATH",
+                "value": self.s3_uploader[no]
+            }
+        ]
+        
+        for op in self.env_options:
+            environment.append({
+                "name": op["name"],
+                "value": op["value"],
+            })
+            
         # run-task
         containerOverrides = {
             "containerOverrides": [
@@ -902,20 +926,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                     "cpu": task_vcpu*1024,
                     "memory": task_memory,
                     "name": self.cluster_name + "_task",
-                    "environment": [
-                        {
-                            "name": "SCRIPT_SETENV_PATH",
-                            "value": self.s3_setenv[no]
-                        },
-                        {
-                            "name": "SCRIPT_DOWNLOADER_PATH",
-                            "value": self.s3_downloader[no]
-                        },
-                        {
-                            "name": "SCRIPT_UPLOADER_PATH",
-                            "value": self.s3_uploader[no]
-                        }
-                    ]
+                    "environment": environment
             }]
         }
 

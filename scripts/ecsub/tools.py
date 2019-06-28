@@ -28,14 +28,18 @@ def message (title, no, messages):
 
     return text
 
-def warning_message (title, no, text):
-    return message (title, no, [{"text": " [WARNING] %s" % (text), "color": ecsub.ansi.colors.WARNING}])
-
 def error_message (title, no, text):
     return message (title, no, [{"text": " [ERROR] %s" % (text), "color": ecsub.ansi.colors.FAIL}])
 
+def warning_message (title, no, text):
+    return message (title, no, [{"text": " [WARNING] %s" % (text), "color": ecsub.ansi.colors.WARNING}])
+
 def info_message (title, no, text):
     return message (title, no, [{"text": " %s" % (text)}])
+
+def important_message (title, no, text):
+    return message (title, no, [{"text": " [IMPORTANT] %s" % (text), "color": ecsub.ansi.colors.MAGENTA}])
+
 
 def base64_encode(text):
     import six

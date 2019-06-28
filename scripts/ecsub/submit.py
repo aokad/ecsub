@@ -495,7 +495,7 @@ def submit_task(aws_instance, no, task_params, spot):
     exit (exit_code)
     
 def main(params):
-    
+
     # set cluster_name
     params["cluster_name"] = params["task_name"]
     if params["cluster_name"] == "":
@@ -643,21 +643,23 @@ def main(params):
         
     except Exception as e:
         print (e)
+        print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
         for process in process_list:
             process.terminate()
-                
+        print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
         aws_instance.clean_up()
         
     except KeyboardInterrupt:
         print ("KeyboardInterrupt")
+        print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
         for process in process_list:
             process.terminate()
-            
+        print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
         aws_instance.clean_up()
     
     return 1
-    
-def entry_point(args):
+
+def set_param(args, options):
     
     params = {
         "wdir": args.wdir,
@@ -684,36 +686,55 @@ def entry_point(args):
         "ignore_location": args.ignore_location,
         "flyaway": False,
     }
+    
+    for op in options:
+        params[op["key"]] = op["value"]
+        
+    return params
+
+def entry_point(args):
+    
+    params = set_param(args, [{"key": "flyaway", "value": False}])
     return main(params)
     
-def entry_point_flyaway(args):
-    
-    params = {
-        "wdir": args.wdir,
-        "image": args.image,
-        "shell": args.shell,
-        "use_amazon_ecr": args.use_amazon_ecr,
-        "script": args.script,
-        "tasks": args.tasks,
-        "task_name": args.task_name,
-        "aws_ec2_instance_type": args.aws_ec2_instance_type,
-        "aws_ec2_instance_type_list": args.aws_ec2_instance_type_list,
-        "aws_ec2_instance_disk_size": args.disk_size,
-        "aws_s3_bucket": args.aws_s3_bucket,
-        "aws_security_group_id": args.aws_security_group_id,
-        "aws_key_name": args.aws_key_name,
-        "aws_subnet_id": args.aws_subnet_id,
-        "spot": args.spot,
-        "retry_od": args.retry_od,
-        "setx": "set -x",
-        "setup_container_cmd": args.setup_container_cmd,
-        "dind": args.dind,
-        "processes": args.processes,
-        "request_payer": args.request_payer_bucket,
-        "ignore_location": args.ignore_location,
-        "flyaway": True,
-    }
+def entry_point_flyaway(args, env_options = None):
+    """
+    # add proj from function call
+    env_options = [
+        { "name": "PROJECT_NAME", "value": "moogle"}
+    ]
+    """
+    options = [{"key": "flyaway", "value": True}]
+    if env_options != None:
+        options.append({"key": "env_options", "value": env_options})
+        
+    params = set_param(args, options)
     return main(params)
-    
+
+class Argments:
+    def __init__(self):
+        self.wdir = "./"
+        self.image = "python:2.7.14"
+        self.use_amazon_ecr = False
+        self.shell = "/bin/bash"
+        self.setup_container_cmd = "apt update; apt install -y python-pip; pip install awscli --upgrade; aws configure list"
+        self.dind = False
+        self.script = False
+        self.tasks = False
+        self.task_name = ""
+        self.aws_s3_bucket = False
+        self.aws_ec2_instance_type = ""
+        self.aws_ec2_instance_type_list = ""
+        self.disk_size = 22
+        self.processes = 20
+        self.aws_security_group_id = ""
+        self.aws_key_name = ""
+        self.aws_subnet_id = ""
+        self.spot = False
+        self.retry_od = False
+        self.request_payer_bucket = ""
+        self.ignore_location = False
+        
 if __name__ == "__main__":
     pass
+
