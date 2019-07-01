@@ -685,8 +685,8 @@ def set_param(args, options):
         "request_payer": args.request_payer_bucket,
         "ignore_location": args.ignore_location,
         "flyaway": False,
-        "aws_account_id": args.aws_account_id,
-        "aws_region": args.aws_region,
+        "aws_account_id": "",
+        "aws_region": "",
     }
     
     for op in options:
