@@ -35,7 +35,7 @@ before_script:
    echo "output = ${AWS_DEFAULT_OUTPUT}" >> ~/.aws/config;
 
 script:
-  - pip install awscli boto3 pyyaml --upgrade
+  - pip install awscli boto3
   - python setup.py build install
   - if [ ${SUBMIT} == 1 ]; then python setup.py test; fi
   - if [ ${SUBMIT} == 0 ]; then python -m unittest discover -s ./tests -p unit_tests_short.py; fi
