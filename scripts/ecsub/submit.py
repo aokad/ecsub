@@ -719,10 +719,10 @@ class Argments:
         self.shell = "/bin/bash"
         self.setup_container_cmd = "apt update; apt install -y python-pip; pip install awscli --upgrade; aws configure list"
         self.dind = False
-        self.script = False
-        self.tasks = False
+        self.script = ""
+        self.tasks = ""
         self.task_name = ""
-        self.aws_s3_bucket = False
+        self.aws_s3_bucket = ""
         self.aws_ec2_instance_type = ""
         self.aws_ec2_instance_type_list = ""
         self.disk_size = 22

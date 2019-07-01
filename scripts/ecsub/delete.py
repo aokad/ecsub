@@ -38,6 +38,7 @@ def main(params):
     params["request_payer"] = []
     params["setup_container_cmd"] = ""
     params["dind"] = False
+    params["flyaway"] = False
     
     aws_instance = ecsub.aws.Aws_ecsub_control(params, 1)
     aws_instance.aws_key_auto = summary["AutoKey"]
