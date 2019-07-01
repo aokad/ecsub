@@ -21,8 +21,13 @@ class Aws_ecsub_control:
 
     def __init__(self, params, task_num):
         
-        self.aws_accountid = self._get_aws_account_id()
-        self.aws_region = self._get_region()
+        self.aws_accountid = params["aws_account_id"]
+        if self.aws_accountid == "":
+            self.aws_accountid = self._get_aws_account_id()
+            
+        self.aws_region = params["aws_region"]
+        if self.aws_region == "":
+            self.aws_region = self._get_region()
 
         self.aws_key_auto = None
         self.aws_key_name = params["aws_key_name"]
@@ -226,8 +231,15 @@ class Aws_ecsub_control:
 
     def _get_aws_account_id(self):
         response = self._subprocess_communicate("aws sts get-caller-identity")
-        return json.loads(response)["Account"]
-
+        
+        info = json.loads(response)
+        account = ""
+        if "Account" in info:
+            account = info["Account"]
+        
+        return account
+        #return json.loads(response)["Account"]
+        
     def _get_region(self):
         response = self._subprocess_communicate("aws configure get region")
         return response.rstrip("\n")

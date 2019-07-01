@@ -39,6 +39,8 @@ def main(params):
     params["setup_container_cmd"] = ""
     params["dind"] = False
     params["flyaway"] = False
+    params["aws_account_id"] = ""
+    params["aws_region"] = ""
     
     aws_instance = ecsub.aws.Aws_ecsub_control(params, 1)
     aws_instance.aws_key_auto = summary["AutoKey"]

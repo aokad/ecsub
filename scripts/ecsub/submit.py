@@ -685,6 +685,8 @@ def set_param(args, options):
         "request_payer": args.request_payer_bucket,
         "ignore_location": args.ignore_location,
         "flyaway": False,
+        "aws_account_id": args.aws_account_id,
+        "aws_region": args.aws_region,
     }
     
     for op in options:
@@ -694,17 +696,17 @@ def set_param(args, options):
 
 def entry_point(args):
     
-    params = set_param(args, [{"key": "flyaway", "value": False}])
+    params = set_param(args, [])
     return main(params)
     
-def entry_point_flyaway(args, env_options = None):
+def entry_point_flyaway(args, arg_options = [], env_options = None):
     """
     # add proj from function call
     env_options = [
         { "name": "PROJECT_NAME", "value": "moogle"}
     ]
     """
-    options = [{"key": "flyaway", "value": True}]
+    options = arg_options + [{"key": "flyaway", "value": True}]
     if env_options != None:
         options.append({"key": "env_options", "value": env_options})
         
