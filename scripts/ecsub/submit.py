@@ -600,6 +600,8 @@ def main(params):
             aws_instance.clean_up()
             return 1
         
+        ctx = multiprocessing.get_context('spawn')
+
         while len(process_list) < len(task_params["tasks"]):
             alives = 0
             for process in process_list:
@@ -614,7 +616,7 @@ def main(params):
                 if no >= len(task_params["tasks"]):
                     break
                     
-                process = multiprocessing.Process(
+                process = ctx.Process(
                         target = submit_task, 
                         name = "%s_%03d" % (params["cluster_name"], no), 
                         args = ((aws_instance, no, task_params, params["spot"]))
