@@ -29,6 +29,8 @@ def read_tasksfile(tasks_file, cluster_name):
         if len(text.rstrip()) == 0:
             continue
         if header == []:
+            if text.startswith("#"):
+                continue
             for item in text.split("\t"):
                 v = item.strip(" ").split(" ")
                 if v[0] == "":
@@ -656,8 +658,6 @@ def main(params):
         for th in thread_list:
             th.join()
             exitcodes.append(ctx[th.getName()])
-            #if process.exitcode != None:
-            #    exitcodes.append(process.exitcode)
         
         if params["flyaway"] == False:
             aws_instance.clean_up()
