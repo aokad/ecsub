@@ -494,7 +494,28 @@ def submit_task(ctx, thread_name, aws_instance, no, task_params, spot):
        
     #exit (exit_code)
     ctx[thread_name] = exit_code
+
+import ctypes
+def terminate_thread(thread):
     
+    """Terminates a python thread from another thread.
+
+    :param thread: a threading.Thread instance
+    """
+    if not thread.isAlive():
+        return
+
+    exc = ctypes.py_object(SystemExit)
+    res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+        ctypes.c_long(thread.ident), exc)
+    if res == 0:
+        raise ValueError("nonexistent thread id")
+    elif res > 1:
+        # """if it returns a number greater than one, you're in trouble,
+        # and you should call it again with exc=NULL to revert the effect"""
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(thread.ident, None)
+        raise SystemError("PyThreadState_SetAsyncExc failed")
+        
 def main(params):
 
     # set cluster_name
@@ -648,16 +669,16 @@ def main(params):
     except Exception as e:
         print (e)
         print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
-        #for process in thread_list:
-        #    process.terminate()
+        for th in thread_list:
+            terminate_thread(th)
         print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
         aws_instance.clean_up()
         
     except KeyboardInterrupt:
         print ("KeyboardInterrupt")
         print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
-        #for process in thread_list:
-        #    process.terminate()
+        for th in thread_list:
+            terminate_thread(th)
         print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
         aws_instance.clean_up()
     
