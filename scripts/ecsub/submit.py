@@ -8,7 +8,7 @@ Created on Wed Mar 14 13:06:19 2018
 import boto3
 import os
 import shutil
-import multiprocessing
+import threading
 import string
 import random
 import datetime
@@ -433,7 +433,7 @@ def _save_summary_file(job_summary, print_cost):
     log_file = "%s/log/summary.%03d.log" % (job_summary["Wdir"], job_summary["No"]) 
     json.dump(job_summary, open(log_file, "w"), indent=4, separators=(',', ': '), sort_keys=True)
     
-def submit_task(aws_instance, no, task_params, spot):
+def submit_task(ctx, thread_name, aws_instance, no, task_params, spot):
     
     job_summary = {
         "AccountId": aws_instance.aws_accountid,
@@ -492,7 +492,8 @@ def submit_task(aws_instance, no, task_params, spot):
         ecsub.metrics.entry_point(aws_instance.wdir, no)
         _save_summary_file(job_summary, True)
        
-    exit (exit_code)
+    #exit (exit_code)
+    ctx[thread_name] = exit_code
     
 def main(params):
 
@@ -588,7 +589,8 @@ def main(params):
         return 1
     
     # run purocesses
-    process_list = []
+    thread_list = []
+    ctx = {}
     
     try:
         # create-cluster
@@ -600,41 +602,41 @@ def main(params):
             aws_instance.clean_up()
             return 1
         
-        ctx = multiprocessing.get_context('spawn')
-
-        while len(process_list) < len(task_params["tasks"]):
+        while len(thread_list) < len(task_params["tasks"]):
             alives = 0
-            for process in process_list:
-                if process.exitcode == None:
+            for th in thread_list:
+                if th.is_alive():
                    alives += 1
                     
             jobs = params["processes"] - alives
-            submitted = len(process_list)
+            submitted = len(thread_list)
             
             for i in range(jobs):
                 no = i + submitted
                 if no >= len(task_params["tasks"]):
                     break
-                    
-                process = ctx.Process(
+
+                thread_name = "%s_%03d" % ("thread", no)
+                th = threading.Thread(
                         target = submit_task, 
-                        name = "%s_%03d" % (params["cluster_name"], no), 
-                        args = ((aws_instance, no, task_params, params["spot"]))
+                        name = thread_name, 
+                        args = ((ctx, thread_name, aws_instance, no, task_params, params["spot"]))
                 )
-                process.daemon == True
-                process.start()
+                th.daemon == True
+                th.start()
                 
-                process_list.append(process)
+                thread_list.append(th)
                 
                 time.sleep(5)
             
             time.sleep(5)
         
         exitcodes = []
-        for process in process_list:
-            process.join()
-            if process.exitcode != None:
-                exitcodes.append(process.exitcode)
+        for th in thread_list:
+            th.join()
+            exitcodes.append(ctx[th.getName()])
+            #if process.exitcode != None:
+            #    exitcodes.append(process.exitcode)
         
         if params["flyaway"] == False:
             aws_instance.clean_up()
@@ -646,16 +648,16 @@ def main(params):
     except Exception as e:
         print (e)
         print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
-        for process in process_list:
-            process.terminate()
+        #for process in thread_list:
+        #    process.terminate()
         print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
         aws_instance.clean_up()
         
     except KeyboardInterrupt:
         print ("KeyboardInterrupt")
         print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
-        for process in process_list:
-            process.terminate()
+        #for process in thread_list:
+        #    process.terminate()
         print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
         aws_instance.clean_up()
     
