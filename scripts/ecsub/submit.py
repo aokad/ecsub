@@ -364,7 +364,7 @@ def submit_task_spot(aws_instance, no):
 
             (exit_code, task_log, system_error) = _run_task(aws_instance, no, instance_id)
             if aws_instance.flyaway and exit_code == 0:
-                break
+                return (exit_code, task_log, False)
                 
             aws_instance.cancel_spot_instance_requests (no = no, instance_id = instance_id)
                 
