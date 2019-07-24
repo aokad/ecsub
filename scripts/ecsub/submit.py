@@ -38,6 +38,8 @@ def read_tasksfile(tasks_file, cluster_name):
                 
                 elif v[0].lower() == "--env":
                     header.append({"type": "env", "recursive": False, "name": v[-1]})
+                elif v[0].lower() == "--secret-env":
+                    header.append({"type": "secret-env", "recursive": False, "name": v[-1]})
                 elif v[0].lower() == "--input-recursive":
                     header.append({"type": "input", "recursive": True, "name": v[-1]})
                 elif v[0].lower() == "--input":
@@ -104,6 +106,10 @@ df -h
     
 def write_s3_scripts(task_params, payer_buckets, setenv, downloader, uploader, no):
    
+    sec_env_text = """decrypt () {
+    echo $(aws kms decrypt --ciphertext-blob fileb://<(echo '$1'| base64 -d) | grep Plaintext | sed s/" "/""/g | sed s/"\\"Plaintext\\"\\:"/""/ | sed s/\\"//g | base64 -d)
+}
+"""
     env_text = "set -x\n"
     dw_text = "set -x\n"
     up_text = "set -x\n"
@@ -113,7 +119,11 @@ def write_s3_scripts(task_params, payer_buckets, setenv, downloader, uploader, n
         if task_params["header"][i]["type"] == "env":
             env_text += 'export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i])
             continue
-            
+        
+        if task_params["header"][i]["type"] == "secret-env":
+            sec_env_text += 'export %s=$(decrypt %s)\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i])
+            continue
+                
         s3_path = task_params["tasks"][no][i]
         scratch_path = task_params["tasks"][no][i].replace("s3://", "/scratch/AWS_DATA/")
     
@@ -138,7 +148,7 @@ def write_s3_scripts(task_params, payer_buckets, setenv, downloader, uploader, n
         elif task_params["header"][i]["type"] == "output":
             up_text += cmd_template.format(option = " ".join(option), path1 = scratch_path, path2 = s3_path)
 
-    open(setenv, "w").write(env_text)
+    open(setenv, "w").write(sec_env_text + env_text)
     open(downloader, "w").write(dw_text)
     open(uploader, "w").write(up_text)
     
@@ -199,7 +209,7 @@ def check_inputfiles_partial(aws_instance, files, dirs):
 
     return []
 
-def check_bucket_location(pathes):
+def check_bucket_location(cluster_name, pathes):
     buckets = []
     for p in pathes:
         path = p.replace("s3://", "", 1).strip("/").rstrip("/").split("/")[0]
@@ -212,7 +222,7 @@ def check_bucket_location(pathes):
     for bucket in sorted(list(set(buckets))):
         response = client.get_bucket_location(Bucket=bucket)
         if response['LocationConstraint'] == None:
-            print (ecsub.tools.warning_message (None, None, "Failue get_bucket_location '%s'..." % (bucket)))
+            print (ecsub.tools.warning_message (cluster_name, None, "Failure get_bucket_location '%s'..." % (bucket)))
         else:
             regions.append(response['LocationConstraint'])
     
@@ -252,7 +262,7 @@ def check_inputfiles(aws_instance, task_params, cluster_name, payer_buckets, wor
                 else:
                     files.append(path)
     
-    regions = check_bucket_location(dirs + files + [work_bucket] + outputs)
+    regions = check_bucket_location(cluster_name, dirs + files + [work_bucket] + outputs)
           
     invalid_files = []
     invalid_files += check_inputfiles_collect(sorted(list(set(files))), sorted(list(set(dirs))), cluster_name)
@@ -260,11 +270,11 @@ def check_inputfiles(aws_instance, task_params, cluster_name, payer_buckets, wor
     
     return (regions, invalid_files)
 
-def upload_scripts(task_params, aws_instance, local_root, s3_root, script, cluster_name, shell, request_payer):
+def upload_scripts(task_params, aws_instance, local_root, s3_root, script, cluster_name, shell, request_payer_bucket):
 
     runsh = local_root + "/run.sh"
     s3_runsh = s3_root + "/run.sh"
-    write_runsh(task_params, runsh, shell, ecsub.tools.is_request_payer_bucket(s3_root, request_payer))
+    write_runsh(task_params, runsh, shell, ecsub.tools.is_request_payer_bucket(s3_root, request_payer_bucket))
     
     s3_setenv_list = []
     s3_downloader_list = []
@@ -277,7 +287,7 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
         uploader = local_root + "/uploader.%d.sh" % (i)
         s3_uploader = s3_root + "/uploader.%d.sh" % (i)
         
-        write_s3_scripts(task_params, request_payer, setenv, downloader, uploader, i)
+        write_s3_scripts(task_params, request_payer_bucket, setenv, downloader, uploader, i)
         s3_setenv_list.append(s3_setenv)
         s3_downloader_list.append(s3_downloader)
         s3_uploader_list.append(s3_uploader)
@@ -412,26 +422,42 @@ def _set_job_info(task_param, start_t, end_t, task_log, exit_code):
 
 def _save_summary_file(job_summary, print_cost):
     
-    template = " + instance-type %s (%s) %.3f USD (%s: %.3f USD), running-time %.3f Hour"
-    costs = 0.0
+    template_ec2 = " + instance %d: $%.3f, instance-type %s (%s) $%.3f (if %s: $%.3f) per GB-month of General Purpose SSD (gp2), running-time %.3f Hour"
+    template_ebs = " + volume %d: $%.3f, $%.3f per GB-month of General Purpose SSD (gp2), running-time %.3f Hour"
+    
+    disk_size = job_summary["Ec2InstanceDiskSize"] + job_summary["Ec2InstanceRootDiskSize"]
+    
+    total_cost = 0.0
     items = []
+    i = 1
     for job in job_summary["Jobs"]:
         wtime = _hour_delta(job["Start"], job["End"])
         
         if job["Spot"]:
-            costs += job["SpotPrice"] * wtime
-            items.append(template % (job["Ec2InstanceType"], "spot", job["SpotPrice"], "od", job["OdPrice"], wtime))
+            cost = job["SpotPrice"] * wtime
+            total_cost += cost
+            
+            items.append(template_ec2 % (i, cost, job["Ec2InstanceType"], "spot", job["SpotPrice"], "od", job["OdPrice"], wtime))
         else:
-            costs += job["OdPrice"] * wtime
-            items.append(template % (job["Ec2InstanceType"], "ondemand", job["OdPrice"], "spot", job["SpotPrice"], wtime))            
+            cost = job["OdPrice"] * wtime
+            total_cost += cost
+            
+            items.append(template_ec2 % (i, cost, job["Ec2InstanceType"], "ondemand", job["OdPrice"], "spot", job["SpotPrice"], wtime))            
+        
+        cost = disk_size * job_summary["EbsPrice"] * wtime / 24 / 30
+        total_cost += cost
+        items.append(template_ebs % (i, cost, job_summary["EbsPrice"], wtime))
         
         job["Start"] = ecsub.tools.datetime_to_standardformat(job["Start"])
         job["End"] = ecsub.tools.datetime_to_standardformat(job["End"])
-
+        
+        i += 1
+        
     if print_cost:        
-        message = "The cost of this job is %.3f USD. \n%s" % (costs, "\n".join(items))
+        message = "The cost of this job is $%.3f. \n%s" % (total_cost, "\n".join(items))
         print (ecsub.tools.info_message (job_summary["ClusterName"], job_summary["No"], message))
     
+    job_summary["Price"] = "%.5f" % (total_cost)
     log_file = "%s/log/summary.%03d.log" % (job_summary["Wdir"], job_summary["No"]) 
     json.dump(job_summary, open(log_file, "w"), indent=4, separators=(',', ': '), sort_keys=True)
     
@@ -443,14 +469,17 @@ def submit_task(ctx, thread_name, aws_instance, no, task_params, spot):
         "AutoKey": aws_instance.aws_key_auto,
         "ClusterName": aws_instance.cluster_name,
         "ClusterArn": aws_instance.cluster_arn,
-        "Ec2InstanceDiskSize": aws_instance.aws_ec2_instance_disk_size,
+        "Ec2InstanceDiskSize": aws_instance.disk_size,
+        "Ec2InstanceRootDiskSize": aws_instance.root_disk_size,
+        "EbsPrice": aws_instance.ebs_price,
         "End": None,
         "Image": aws_instance.image,
         "KeyName": aws_instance.aws_key_name,
         "LogGroupName": aws_instance.log_group_name,
         "No": no,
+        "Price": 0,
         "Region": aws_instance.aws_region,
-        "RequestPayerBucket": aws_instance.request_payer,
+        "RequestPayerBucket": aws_instance.request_payer_bucket,
         "S3RunSh": aws_instance.s3_runsh,
         "S3Script": aws_instance.s3_script,
         "S3Setenv": aws_instance.s3_setenv[no],
@@ -546,12 +575,12 @@ def main(params):
         print (ecsub.tools.error_message (params["cluster_name"], None, "One of --aws-ec2-instance-type option and --aws-ec2-instance-type-list option is required."))
         return 1
     
-    # "request_payer": 
-    request_payer = params["request_payer"].replace(" ", "")
-    if len(request_payer) == 0:
-        params["request_payer"] = []
+    # "request_payer_bucket": 
+    request_payer_bucket = params["request_payer_bucket"].replace(" ", "")
+    if len(request_payer_bucket) == 0:
+        params["request_payer_bucket"] = []
     else:
-        params["request_payer"] = request_payer.split(",")
+        params["request_payer_bucket"] = request_payer_bucket.split(",")
         
     # read tasks file
     task_params = read_tasksfile(params["tasks"], params["cluster_name"])
@@ -577,6 +606,11 @@ def main(params):
     os.makedirs(params["wdir"] + "/conf")
     os.makedirs(params["wdir"] + "/script")
 
+    # disk-size
+    if params["disk_size"] < 1:
+        print (ecsub.tools.error_message (params["cluster_name"], None, "disk-size %d is smaller than expected size 1GB." % (params["disk_size"])))
+        return 1
+        
     aws_instance = ecsub.aws.Aws_ecsub_control(params, len(task_params["tasks"]))
     
     # check task-param
@@ -584,7 +618,7 @@ def main(params):
         return 1
 
     # check s3-files path
-    (regions, invalid_pathes) = check_inputfiles(aws_instance, task_params, params["cluster_name"], params["request_payer"], params["aws_s3_bucket"])
+    (regions, invalid_pathes) = check_inputfiles(aws_instance, task_params, params["cluster_name"], params["request_payer_bucket"], params["aws_s3_bucket"])
     if len(regions) > 1:
         if params["ignore_location"]:
             print (ecsub.tools.warning_message (params["cluster_name"], None, "your task uses multipule regions '%s'." % (",".join(regions))))
@@ -607,10 +641,14 @@ def main(params):
                    params["script"],
                    params["cluster_name"],
                    params["shell"],
-                   params["request_payer"]):
+                   params["request_payer_bucket"]):
         print (ecsub.tools.error_message (params["cluster_name"], None, "failure upload files to s3 bucket: %s." % (params["aws_s3_bucket"])))
         return 1
     
+    # Ebs Price
+    if not aws_instance.set_ebs_price ():
+        return 1
+        
     # run purocesses
     thread_list = []
     ctx = {}
@@ -684,58 +722,35 @@ def main(params):
     
     return 1
 
-def set_param(args, options):
+def set_param(args, env_options = None):
     
-    params = {
-        "wdir": args.wdir,
-        "image": args.image,
-        "shell": args.shell,
-        "use_amazon_ecr": args.use_amazon_ecr,
-        "script": args.script,
-        "tasks": args.tasks,
-        "task_name": args.task_name,
-        "aws_ec2_instance_type": args.aws_ec2_instance_type,
-        "aws_ec2_instance_type_list": args.aws_ec2_instance_type_list,
-        "aws_ec2_instance_disk_size": args.disk_size,
-        "aws_s3_bucket": args.aws_s3_bucket,
-        "aws_security_group_id": args.aws_security_group_id,
-        "aws_key_name": args.aws_key_name,
-        "aws_subnet_id": args.aws_subnet_id,
-        "spot": args.spot,
-        "retry_od": args.retry_od,
-        "setx": "set -x",
-        "setup_container_cmd": args.setup_container_cmd,
-        "dind": args.dind,
-        "processes": args.processes,
-        "request_payer": args.request_payer_bucket,
-        "ignore_location": args.ignore_location,
-        "flyaway": False,
-        "aws_account_id": "",
-        "aws_region": "",
-    }
+    default = Argments()
     
-    for op in options:
-        params[op["key"]] = op["value"]
+    params = {}
+    for key in default.__dict__.keys():
+        params[key] = default.__dict__[key]
+    
+    for key in args.__dict__.keys():
+        params[key] = args.__dict__[key]
         
     return params
 
 def entry_point(args):
     
-    params = set_param(args, [])
+    params = set_param(args)
     return main(params)
     
-def entry_point_flyaway(args, arg_options = [], env_options = None):
+def entry_point_flyaway(args, env_options = None):
+    
     """
     # add proj from function call
     env_options = [
         { "name": "PROJECT_NAME", "value": "moogle"}
     ]
     """
-    options = arg_options + [{"key": "flyaway", "value": True}]
-    if env_options != None:
-        options.append({"key": "env_options", "value": env_options})
-        
-    params = set_param(args, options)
+    
+    params = set_param(args, env_options = env_options)
+    params["flyaway"] = True
     return main(params)
 
 class Argments:
@@ -761,6 +776,13 @@ class Argments:
         self.retry_od = False
         self.request_payer_bucket = ""
         self.ignore_location = False
+        
+        # The followings are not optional
+        self.root_disk_size = 22
+        self.setx = "set -x"
+        self.flyaway = False
+        self.aws_account_id = ""
+        self.aws_region = ""
         
 if __name__ == "__main__":
     pass

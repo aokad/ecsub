@@ -64,13 +64,12 @@ def main():
     # report 
     report_parser = subparsers.add_parser("report", help = "view report")
     report_parser.add_argument("--wdir", metavar = "path/to/dir", help = "{PATH} when 'ecsub submit --wdir {PATH}'", type = str, default = "./")
-    report_parser.add_argument("--past", help = "display summary in previous version.", action = 'store_true')
     report_parser.add_argument("-f", "--failed", help = "display failed or abnoraml exit status job only.", action = 'store_true')
     report_parser.add_argument("-b", "--begin", metavar = "[YYYYMMDDhhmm]", help = "The earliest createdAt time for jobs to be summarized, in the format [YYYYMMDDhhmm]", type = str, default = "")
     report_parser.add_argument("-e", "--end", metavar = "[YYYYMMDDhhmm]", help = "The latest createdAt time for jobs to be summarized, in the format [YYYYMMDDhhmm]", type = str, default = "")
     report_parser.add_argument("--max", metavar = "20", help = "Maximum display count", type = int, default = 0)
     report_parser.add_argument("--sortby", metavar = "sort_key", choices=[
-            "exitCode",
+            "exit_code",
             "taskname",
             "job_startAt",
             "job_endAt",
@@ -78,6 +77,7 @@ def main():
             "cpu",
             "memory",
             "disk_size",
+            "price",
             "instance_createAt",
             "instance_stopAt"
         ], help = "Sort summary key", default = "taskname")
@@ -98,7 +98,7 @@ def main():
     log_parser.add_argument("--rm", help = "flag for remove from AWS", action = 'store_true')
     log_parser.add_argument("--dw", help = "flag for download from AWS", action = 'store_true')
     log_parser.set_defaults(func = log.entry_point)
-    
+
     argv = sys.argv[1:]
     if len(argv) < 1:
         argv = [""]

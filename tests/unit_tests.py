@@ -11,6 +11,7 @@ import os
 import glob
 import subprocess
 import datetime
+import ecsub.encrypt
 
 class SubmitTest(unittest.TestCase):
 
@@ -40,20 +41,20 @@ class SubmitTest(unittest.TestCase):
     
     def test1_01_version(self):
         subprocess.check_call(['python', 'ecsub', '--version'])
-
-    def test2_01_submit(self):
-        options = [
-            "--wdir", self.WDIR,
-            "--image", "python:2-alpine3.6",
-            "--shell", "ash",
-            "--script", "./examples/run-wordcount.sh",
-            "--tasks", "./tests/test-wordcount.tsv",
-            "--aws-ec2-instance-type", "t2.micro",
-            "--disk-size", "1",
-            "--aws-s3-bucket", "s3://travisci-work/wordcount/output/",
-        ]
-        subprocess.check_call(['python', 'ecsub', 'submit'] + options)
     
+    #def test2_01_submit(self):
+    #    options = [
+    #        "--wdir", self.WDIR,
+    #        "--image", "python:2-alpine3.6",
+    #        "--shell", "ash",
+    #        "--script", "./examples/run-wordcount.sh",
+    #        "--tasks", "./tests/test-wordcount.tsv",
+    #        "--aws-ec2-instance-type", "t2.micro",
+    #        "--disk-size", "1",
+    #        "--aws-s3-bucket", "s3://travisci-work/wordcount/output/",
+    #    ]
+    #    subprocess.check_call(['python', 'ecsub', 'submit'] + options)
+    #
     def test2_02_submit(self):
         options = [
             "--wdir", self.WDIR,
@@ -68,46 +69,58 @@ class SubmitTest(unittest.TestCase):
         ]
         subprocess.check_call(['python', 'ecsub', 'submit'] + options)
     
-    def test3_01_report(self):
-        options = [
-            "--wdir", self.WDIR,
-            "-b", self.START,
-        ]
-        subprocess.check_call(['python', 'ecsub', 'report'] + options)
-
-    def test4_01_logs(self):
-        
-        after = glob.glob(self.WDIR + "/*")
-        
-        for b in self.BEFORE:
-            if b in after:
-                after.remove(b)
-        
-        for dir_name in after:
-            cluster_name = os.path.basename(dir_name)
-            
-            # download and remove
-            options = [
-                "--wdir", self.WDIR,
-                "--prefix", cluster_name,
-                "--rm", "--dw"
-            ]
-            subprocess.check_call(['python', 'ecsub', 'logs'] + options)
-    
-    def test5_01_delete(self):
-    
-        after = glob.glob(self.WDIR + "/*")
-        for b in self.BEFORE:
-            if b in after:
-                after.remove(b)
-            
-        for dir_name in after:
-            cluster_name = os.path.basename(dir_name)
-            
-            options = [
-                "--wdir", self.WDIR
-            ]
-            subprocess.check_call(['python', 'ecsub', 'delete', cluster_name] + options)
+    #def test3_01_report(self):
+    #    options = [
+    #        "--wdir", self.WDIR,
+    #        "-b", self.START,
+    #    ]
+    #    subprocess.check_call(['python', 'ecsub', 'report'] + options)
+    #
+    #def test4_01_logs(self):
+    #    
+    #    after = glob.glob(self.WDIR + "/*")
+    #    
+    #    for b in self.BEFORE:
+    #        if b in after:
+    #            after.remove(b)
+    #    
+    #    for dir_name in after:
+    #        cluster_name = os.path.basename(dir_name)
+    #        
+    #        # download and remove
+    #        options = [
+    #            "--wdir", self.WDIR,
+    #            "--prefix", cluster_name,
+    #            "--rm", "--dw"
+    #        ]
+    #        subprocess.check_call(['python', 'ecsub', 'logs'] + options)
+    #
+    #def test5_01_delete(self):
+    #
+    #    after = glob.glob(self.WDIR + "/*")
+    #    for b in self.BEFORE:
+    #        if b in after:
+    #            after.remove(b)
+    #        
+    #    for dir_name in after:
+    #        cluster_name = os.path.basename(dir_name)
+    #        
+    #        options = [
+    #            "--wdir", self.WDIR
+    #        ]
+    #        subprocess.check_call(['python', 'ecsub', 'delete', cluster_name] + options)
+    #
+    #def test6_01_encrypt(self):
+    #
+    #    class Argments:
+    #        def __init__(self):
+    #            self.plain_text = "abcdef"
+    #            self.cipher_text = ""
+    #            
+    #    args = Argments()
+    #    args.cipher_text = ecsub.encrypt.encrypt(args)
+    #    dec = ecsub.encrypt.decrypt(args)
+    #    self.assertEqual (args.plain_text, dec)
 
 def suite():
     suite = unittest.TestSuite()

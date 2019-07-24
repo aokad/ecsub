@@ -6,6 +6,7 @@ Created on Wed Mar 14 13:06:19 2018
 """
 
 import ecsub.aws
+import ecsub.submit
 import ecsub.tools
 import glob
 
@@ -21,28 +22,13 @@ def main(params):
     
     import json
     summary = json.load(open(summary_list[0]))
-    params["aws_key_name"] = summary["KeyName"]
-    params["aws_security_group_id"] = summary["SecurityGroupId"]
+
     params["cluster_name"] = summary["ClusterName"]
-    params["shell"]  = summary["Shell"]
-    params["aws_ec2_instance_disk_size"] = summary["Ec2InstanceDiskSize"]
-    params["image"] = summary["Image"]
-    params["use_amazon_ecr"] = summary["UseAmazonEcr"]
-    params["spot"] = summary["Spot"]
-    
-    # no use
-    params["aws_ec2_instance_type_list"] = ['']
-    params["aws_ec2_instance_type"] = ""
-    params["aws_subnet_id"] = ""
-    params["retry_od"] = False
-    params["request_payer"] = []
-    params["setup_container_cmd"] = ""
-    params["dind"] = False
-    params["flyaway"] = False
-    params["aws_account_id"] = ""
-    params["aws_region"] = ""
     
     aws_instance = ecsub.aws.Aws_ecsub_control(params, 1)
+    aws_instance.aws_key_name = summary["KeyName"]
+    aws_instance.aws_security_group_id = summary["SecurityGroupId"]
+    aws_instance.spot = summary["Spot"]
     aws_instance.aws_key_auto = summary["AutoKey"]
     aws_instance.cluster_arn = summary["ClusterArn"]
     aws_instance.task_definition_arn = summary["TaskDefinitionAn"]
@@ -52,12 +38,7 @@ def main(params):
     return 0
     
 def entry_point(args):
-    
-    params = {
-        "wdir": args.wdir,
-        "task_name": args.task_name,
-        "setx": "set -x"
-    }
+    params = ecsub.submit.set_param(args)
     return main(params)
     
 if __name__ == "__main__":

@@ -42,7 +42,7 @@ setup(name='ecsub',
       
       package_dir = {'': 'scripts'},
       packages=['ecsub'],
-      scripts=['ecsub'],
+      scripts=['ecsub', 'ecsub_tools'],
       include_package_data=True,
       zip_safe=False,
       install_requires=[

@@ -1,0 +1,43 @@
+#! /usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""
+Created on Wed Mar 14 11:53:04 2018
+
+@author: Okada
+"""
+
+import sys
+import argparse
+import ecsub.encrypt as encrypt
+from ecsub import __version__
+        
+def main():
+    prog = "ecsub_tools"
+    parser = argparse.ArgumentParser(prog = prog)
+    parser.add_argument("--version", action = "version", version = prog + "-" + __version__)
+    subparsers = parser.add_subparsers()
+    
+    ##########
+    # encrypt
+    encrypt_parser = subparsers.add_parser("encrypt", help = "encrypt plain text")
+    encrypt_parser.add_argument("plain_text", metavar = "PlainText", help = "set your secret text", type = str)
+    encrypt_parser.set_defaults(func = encrypt.encrypt)
+
+    ##########
+    # decrypt
+    decrypt_parser = subparsers.add_parser("decrypt", help = "decrypt cipher text")
+    decrypt_parser.add_argument("cipher_text", metavar = "CipherText", help = "cipher text", type = str)
+    decrypt_parser.set_defaults(func = encrypt.decrypt)
+    
+    argv = sys.argv[1:]
+    if len(argv) < 1:
+        argv = [""]
+        
+    args = parser.parse_args(argv)
+    
+    return args.func(args)
+    
+if __name__ == "__main__":
+    print (main())
+

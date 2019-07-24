@@ -16,6 +16,7 @@ import ecsub.ansi
 import ecsub.aws_config
 import ecsub.tools
 import glob
+import base64
 
 class Aws_ecsub_control:
 
@@ -50,7 +51,8 @@ class Aws_ecsub_control:
         
         self.aws_ecs_task_vcpu_default = 1
         self.aws_ecs_task_memory_default = 300
-        self.aws_ec2_instance_disk_size = params["aws_ec2_instance_disk_size"]
+        self.disk_size = params["disk_size"]
+        self.root_disk_size = params["root_disk_size"]
         self.aws_subnet_id = params["aws_subnet_id"]
         self.image = params["image"]
         self.use_amazon_ecr = params["use_amazon_ecr"]
@@ -63,8 +65,8 @@ class Aws_ecsub_control:
         self.s3_setenv = []
         self.s3_downloader = []
         self.s3_uploader = []
-        self.request_payer = []
-        self.request_payer.extend(params["request_payer"])
+        self.request_payer_bucket = []
+        self.request_payer_bucket.extend(params["request_payer_bucket"])
         
         self.spot = params["spot"]
         self.retry_od = params["retry_od"]
@@ -83,6 +85,8 @@ class Aws_ecsub_control:
         self.env_options = []
         if "env_options" in params:
             self.env_options.extend(params["env_options"])
+        
+        self.ebs_price = 0
         
     def _subprocess_communicate (self, cmd):
         response = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).communicate()[0]
@@ -125,7 +129,7 @@ class Aws_ecsub_control:
         print(ecsub.tools.info_message (self.cluster_name, no, "check s3-path '%s'..." % (path)))
         
         option = ""
-        if ecsub.tools.is_request_payer_bucket(path, self.request_payer):
+        if ecsub.tools.is_request_payer_bucket(path, self.request_payer_bucket):
             option = "--request-payer requester"
             
         cmd_template = "{setx}; aws s3 ls {option} {path}"
@@ -192,8 +196,8 @@ class Aws_ecsub_control:
         if recursive:
             option = "--recursive"
 
-        if ecsub.tools.is_request_payer_bucket(src, self.request_payer) or \
-           ecsub.tools.is_request_payer_bucket(dst, self.request_payer) :
+        if ecsub.tools.is_request_payer_bucket(src, self.request_payer_bucket) or \
+           ecsub.tools.is_request_payer_bucket(dst, self.request_payer_bucket) :
             if option != "":
                 option += " "
             option += "--request-payer requester"
@@ -309,7 +313,26 @@ class Aws_ecsub_control:
 
         print(ecsub.tools.error_message (self.cluster_name, None, "Default SecurityGroupId is not exist."))
         return False
-        
+    
+    def get_secret_value(self):
+        if self.duration_seconds < -1:
+            return None
+        if self.duration_seconds < 900:
+            self.duration_seconds = 900
+            
+        response = boto3.client("sts").client.get_session_token(DurationSeconds=self.duration_seconds)
+        if "Credentials" in response:
+            return response["Credentials"]
+        """
+        {
+            'AccessKeyId': 'A***',
+            'Expiration': datetime.datetime(),
+            'SecretAccessKey': '***',
+            'SessionToken': '***'
+        }
+        """
+        return None
+    
     def create_cluster(self):
 
         # set key-pair
@@ -349,7 +372,7 @@ class Aws_ecsub_control:
         #print(ecsub.tools.info_message (self.cluster_name, None, "EcsTaskRole: %s" % (ECSTASKROLE)))
         #print(ecsub.tools.info_message (self.cluster_name, None, "DockerImage: %s" % (IMAGE_ARN)))
         option = ""
-        if ecsub.tools.is_request_payer_bucket(self.s3_runsh, self.request_payer):
+        if ecsub.tools.is_request_payer_bucket(self.s3_runsh, self.request_payer_bucket):
             option = "--request-payer requester "
         
         mountpoints = [
@@ -512,14 +535,14 @@ echo "aws configure set aws_access_key_id "\$(aws configure get aws_access_key_i
 echo "aws configure set aws_secret_access_key "\$(aws configure get aws_secret_access_key) >> /external/aws_confgure.sh
 echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
 --==BOUNDARY==--
-""".format(cluster_arn = self.cluster_arn, disk_size = self.aws_ec2_instance_disk_size, region = self.aws_region)
-
+""".format(cluster_arn = self.cluster_arn, region = self.aws_region)
+    
     def _getblock_device_mappings(self):
         return [
             {
                 "DeviceName":"/dev/xvdcz",
                 "Ebs": {
-                    "VolumeSize": 22,
+                    "VolumeSize": self.root_disk_size,
                     "VolumeType": "gp2",
                     "DeleteOnTermination":True
                 }
@@ -527,12 +550,13 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             {
                 "DeviceName":"/dev/sdb",
                 "Ebs": {
-                    "VolumeSize": self.aws_ec2_instance_disk_size,
+                    "VolumeSize": self.disk_size,
                     "VolumeType": "gp2",
                     "DeleteOnTermination":True
                 }
             }
         ]
+    
     def _wait_run_instance(self, instance_id, no):
         
         if instance_id != "":
@@ -663,7 +687,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         
         values.sort()
         if len(values) > 0:
-            print(ecsub.tools.info_message (self.cluster_name, no, "Instance Type: %s, Ondemand Price: %s USD" % (self.task_param[no]["aws_ec2_instance_type"], values[-1])))
+            print(ecsub.tools.info_message (self.cluster_name, no, "Instance Type: %s, Ondemand Price: $%s" % (self.task_param[no]["aws_ec2_instance_type"], values[-1])))
             self.task_param[no]["od_price"] = float(values[-1])
             return True
         
@@ -705,12 +729,58 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             return False
         
         if price["price"] > self.task_param[no]["od_price"] * 0.98:
-            print(ecsub.tools.error_message (self.cluster_name, no, "spot price %f is close to ondemand price %f." % (price["price"], self.task_param[no]["od_price"])))
+            print(ecsub.tools.error_message (self.cluster_name, no, "spot price $%.3f is close to ondemand price $%.3f." % (price["price"], self.task_param[no]["od_price"])))
             return False
         
         self.task_param[no]["spot_price"] = price["price"]
         self.task_param[no]["spot_az"] = price["az"]
-        print(ecsub.tools.info_message (self.cluster_name, no, "Spot Price: %s USD, Availality Zone: %s" % (price["price"], price["az"])))
+        print(ecsub.tools.info_message (self.cluster_name, no, "Spot Price: $%.3f, Availality Zone: %s" % (price["price"], price["az"])))
+        return True
+    
+    def set_ebs_price (self):
+        def _get_ebs_price (region, vtype):
+        
+            ebs_name_map = {
+                'standard': 'Magnetic',
+                'gp2': 'General Purpose',
+                'io1': 'Provisioned IOPS',
+                'st1': 'Throughput Optimized HDD',
+                'sc1': 'Cold HDD'
+            }
+            
+            response = boto3.client('pricing', region_name = "ap-south-1").get_products(
+                ServiceCode='AmazonEC2',
+                Filters = [
+                    {'Type': 'TERM_MATCH', 'Field': 'volumeType', 'Value': ebs_name_map[vtype]}, 
+                    {'Type': 'TERM_MATCH', 'Field': 'location', 'Value': ecsub.aws_config.region_to_location(region)}
+                ],
+                MaxResults=100
+            )
+            
+            values = []
+            try:
+                for i in range(len(response["PriceList"])):
+                    obj = json.loads(response["PriceList"][i])
+                    for key1 in obj["terms"]["OnDemand"].keys():
+                        for key2 in obj["terms"]["OnDemand"][key1]["priceDimensions"].keys():
+                            values.append(obj["terms"]["OnDemand"][key1]["priceDimensions"][key2]["pricePerUnit"]["USD"])
+            except Exception as e:
+                return 0
+            
+            values.sort()
+            if len(values) > 0:
+                return float(values[-1])
+            
+            return 0
+    
+        price = _get_ebs_price (self.aws_region, "gp2")
+        
+        if price == 0:
+            print(ecsub.tools.error_message (self.cluster_name, None, "failure _get_ebs_price."))
+            return False
+        
+        self.ebs_price = price
+        print(ecsub.tools.info_message (self.cluster_name, None, "Disk Price: $%.3f per GB-month of General Purpose SSD (gp2)" % (price)))
         return True
     
     def _describe_spot_instances(self, no, request_id = None, instance_id = None):
@@ -1067,7 +1137,8 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
 
         response["tasks"][0]["log"] = log_html
         response["tasks"][0]["instance_type"] = self.task_param[no]["aws_ec2_instance_type"]
-        response["tasks"][0]["disk_size"] = self.aws_ec2_instance_disk_size
+        response["tasks"][0]["disk_size"] = self.disk_size
+        response["tasks"][0]["root_disk_size"] = self.root_disk_size
         response["tasks"][0]["no"] = no
         response["tasks"][0]["instance_id"] = instance_id
         response["tasks"][0]["subnet_id"] = subnet_id
@@ -1231,3 +1302,51 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                 log = self._log_path("delete-key-pair")
             )
             self._subprocess_call(cmd)
+
+def __get_ecsub_key():
+    
+    client = boto3.client("kms")
+    response = client.list_aliases()
+    
+    ecsub_keys = []
+    if 'Aliases' in response:
+        for alias in response['Aliases']:
+            if not alias["AliasName"].startswith("alias/ecsub"):
+                continue
+            
+            response2 = client.describe_key(
+                KeyId=alias['TargetKeyId']
+            )
+            
+            ecsub_keys.append({
+                'AliasName': alias['AliasName'],
+                'TargetKeyId': alias['TargetKeyId'],
+                'CreationDate': response2['KeyMetadata']['CreationDate']
+            })
+   
+    if len(ecsub_keys) == 0:
+        return None
+
+    return sorted(ecsub_keys, key=lambda x: x['CreationDate'])[-1]['AliasName']
+                
+def encrypt_data(plain_text):
+    key = __get_ecsub_key()
+    
+    if key == None:
+        print(ecsub.tools.error_message (None, None, "ecsub-key is not exist."))
+        return ""
+    
+    response = boto3.client("kms").encrypt(
+        KeyId = key,
+        Plaintext = plain_text
+    )
+    
+    return base64.b64encode(response['CiphertextBlob']).decode('utf-8')
+    
+def decrypt_data(encrypt_text):
+    
+    enc = base64.b64decode(encrypt_text)
+    response = boto3.client("kms").decrypt(
+        CiphertextBlob= enc
+    )
+    return response['Plaintext'].decode('utf-8')
