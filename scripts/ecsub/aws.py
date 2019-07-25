@@ -433,6 +433,10 @@ class Aws_ecsub_control:
                           {
                               "name": "SCRIPT_UPLOADER_PATH",
                               "value": ""
+                          },
+                          {
+                              "name": "AWS_DEFAULT_REGION",
+                              "value": self.aws_region
                           }
                       ],
                       "logConfiguration": {
@@ -679,7 +683,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                 obj = json.loads(response["PriceList"][i])
                 for key1 in obj["terms"]["OnDemand"].keys():
                     for key2 in obj["terms"]["OnDemand"][key1]["priceDimensions"].keys():
-                        values.append(obj["terms"]["OnDemand"][key1]["priceDimensions"][key2]["pricePerUnit"]["USD"])
+                        values.append(float(obj["terms"]["OnDemand"][key1]["priceDimensions"][key2]["pricePerUnit"]["USD"]))
         except Exception as e:
             print (e)
             print(ecsub.tools.error_message (self.cluster_name, no, "instance-type %s can not be used in region '%s'." % (self.task_param[no]["aws_ec2_instance_type"], self.aws_region)))
@@ -687,8 +691,8 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         
         values.sort()
         if len(values) > 0:
-            print(ecsub.tools.info_message (self.cluster_name, no, "Instance Type: %s, Ondemand Price: $%s" % (self.task_param[no]["aws_ec2_instance_type"], values[-1])))
-            self.task_param[no]["od_price"] = float(values[-1])
+            print(ecsub.tools.info_message (self.cluster_name, no, "Instance Type: %s, Ondemand Price: $%.3f" % (self.task_param[no]["aws_ec2_instance_type"], values[-1])))
+            self.task_param[no]["od_price"] = values[-1]
             return True
         
         print(ecsub.tools.error_message (self.cluster_name, no, "instance-type %s can not be used in region '%s'." % (self.task_param[no]["aws_ec2_instance_type"], self.aws_region)))

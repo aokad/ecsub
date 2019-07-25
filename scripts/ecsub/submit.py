@@ -106,8 +106,17 @@ df -h
     
 def write_s3_scripts(task_params, payer_buckets, setenv, downloader, uploader, no):
    
-    sec_env_text = """decrypt () {
-    echo $(aws kms decrypt --ciphertext-blob fileb://<(echo '$1'| base64 -d) | grep Plaintext | sed s/" "/""/g | sed s/"\\"Plaintext\\"\\:"/""/ | sed s/\\"//g | base64 -d)
+    sec_env_text = """set -e
+set +x
+cat << EOF > ./ecsub_json_query.py
+import json, sys
+print(json.loads(sys.argv[1])["Plaintext"])
+EOF
+
+decrypt () {
+    echo $1 | base64 -d > ./ecsub_encrypted.txt
+    response=$(aws kms decrypt --ciphertext-blob fileb://ecsub_encrypted.txt)
+    echo $(python ./ecsub_json_query.py "$response" | base64 -d)
 }
 """
     env_text = "set -x\n"
@@ -121,7 +130,7 @@ def write_s3_scripts(task_params, payer_buckets, setenv, downloader, uploader, n
             continue
         
         if task_params["header"][i]["type"] == "secret-env":
-            sec_env_text += 'export %s=$(decrypt %s)\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i])
+            sec_env_text += 'export %s=$(decrypt "%s")\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i])
             continue
                 
         s3_path = task_params["tasks"][no][i]
