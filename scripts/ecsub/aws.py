@@ -1244,19 +1244,6 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         
         if len(instance_ids) > 0:
             self.terminate_instances (" ".join(instance_ids))
-#            import math
-#            for i in range(int(math.ceil(len(instance_ids)/1000))):
-#                start = i * 1000
-#                end = start + 999
-#                if end > (len(instance_ids) - 1):
-#                    end = len(instance_ids) - 1
-#                
-#                if start == end:
-#                    print("%d,%d,%s" % (start,end,instance_ids[start]))
-#                    self.terminate_instances (instance_ids[start])
-#                else:
-#                    print("%d,%d,%s" % (start,end," ".join(instance_ids[start:end])))
-#                    self.terminate_instances (" ".join(instance_ids[start:end]))
         
         # cancel_spot_instance_requests
         req_ids = []

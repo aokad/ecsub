@@ -434,7 +434,7 @@ def _save_summary_file(job_summary, print_cost):
     template_ec2 = " + instance %d: $%.3f, instance-type %s (%s) $%.3f (if %s: $%.3f) per GB-month of General Purpose SSD (gp2), running-time %.3f Hour"
     template_ebs = " + volume %d: $%.3f, $%.3f per GB-month of General Purpose SSD (gp2), running-time %.3f Hour"
     
-    disk_size = job_summary["Ec2InstanceDiskSize"] + job_summary["Ec2InstanceRootDiskSize"]
+    disk_size = job_summary["Ec2InstanceDiskSize"] + job_summary["Ec2InstanceRootDiskSize"] + 8
     
     total_cost = 0.0
     items = []
