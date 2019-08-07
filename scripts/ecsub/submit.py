@@ -327,8 +327,8 @@ def _run_task(aws_instance, no, instance_id):
     
     try:
         (exit_code, task_log) = aws_instance.run_task(no, instance_id)
-        if exit_code == 127:
-            system_error = True
+        #if exit_code == 127:
+        #    system_error = True
     
     except Exception as e:
         print (ecsub.tools.error_message (aws_instance.cluster_name, no, e))
@@ -711,6 +711,7 @@ def main(params):
             
         # SUCCESS?
         if [0] == list(set(exitcodes)):
+            print ("ecsub completed successfully!")
             return 0
         
     except Exception as e:
