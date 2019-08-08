@@ -50,8 +50,8 @@ UserGroup:
 1. Create "ecsub-user" group, then attach the following policies.
 
  - AmazonEC2FullAccess
- - S3_S3FullAccess (It is better to limit "Resource:")
  - AmazonECS_FullAccess
+ - S3_S3FullAccess (It is better to limit "Resource:")
  - AWSPriceListServiceFullAccess 
  - CloudWatchLogsFullAccess
  - CloudWatchReadOnlyAccess

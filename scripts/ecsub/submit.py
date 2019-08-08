@@ -431,8 +431,8 @@ def _set_job_info(task_param, start_t, end_t, task_log, exit_code):
 
 def _save_summary_file(job_summary, print_cost):
     
-    template_ec2 = " + instance %d: $%.3f, instance-type %s (%s) $%.3f (if %s: $%.3f) per GB-month of General Purpose SSD (gp2), running-time %.3f Hour"
-    template_ebs = " + volume %d: $%.3f, $%.3f per GB-month of General Purpose SSD (gp2), running-time %.3f Hour"
+    template_ec2 = " + instance-%d: $%.3f, instance-type %s (%s) $%.3f (if %s: $%.3f), running-time %.3f Hour"
+    template_ebs = " + volume-%d: $%.3f, attached %d (GiB), $%.3f per GB-month of General Purpose SSD (gp2), running-time %.3f Hour"
     
     disk_size = job_summary["Ec2InstanceDiskSize"] + job_summary["Ec2InstanceRootDiskSize"] + 8
     
@@ -455,7 +455,7 @@ def _save_summary_file(job_summary, print_cost):
         
         cost = disk_size * job_summary["EbsPrice"] * wtime / 24 / 30
         total_cost += cost
-        items.append(template_ebs % (i, cost, job_summary["EbsPrice"], wtime))
+        items.append(template_ebs % (i, cost, disk_size, job_summary["EbsPrice"], wtime))
         
         job["Start"] = ecsub.tools.datetime_to_standardformat(job["Start"])
         job["End"] = ecsub.tools.datetime_to_standardformat(job["End"])
@@ -730,6 +730,7 @@ def main(params):
         print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
         aws_instance.clean_up()
     
+    print ("ecsub failed.")
     return 1
 
 def set_param(args, env_options = None):
