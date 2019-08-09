@@ -245,8 +245,7 @@ ecsub delete --wdir /tmp/ecsub sample2-bRnfG
 
 ## 5. Documentation
 
- - [document](./docs/AWS-ECS.pdf)
- - [ecsub flow](./docs/ecsub-flow.png)
+ - [document](https://aokad.github.io/ecsub-doc-ja/)
 
 ## 6. License 
 
