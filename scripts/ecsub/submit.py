@@ -429,17 +429,17 @@ def _set_job_info(task_param, start_t, end_t, task_log, exit_code):
 
     return info
 
-def _save_summary_file(job_summary, print_cost):
+def _save_summary_file(task_summary, print_cost):
     
     template_ec2 = " + instance-%d: $%.3f, instance-type %s (%s) $%.3f (if %s: $%.3f), running-time %.3f Hour"
     template_ebs = " + volume-%d: $%.3f, attached %d (GiB), $%.3f per GB-month of General Purpose SSD (gp2), running-time %.3f Hour"
     
-    disk_size = job_summary["Ec2InstanceDiskSize"] + job_summary["Ec2InstanceRootDiskSize"] + 8
+    disk_size = task_summary["Ec2InstanceDiskSize"] + task_summary["Ec2InstanceRootDiskSize"] + 8
     
     total_cost = 0.0
     items = []
     i = 1
-    for job in job_summary["Jobs"]:
+    for job in task_summary["Jobs"]:
         wtime = _hour_delta(job["Start"], job["End"])
         
         if job["Spot"]:
@@ -451,11 +451,11 @@ def _save_summary_file(job_summary, print_cost):
             cost = job["OdPrice"] * wtime
             total_cost += cost
             
-            items.append(template_ec2 % (i, cost, job["Ec2InstanceType"], "ondemand", job["OdPrice"], "spot", job["SpotPrice"], wtime))            
+            items.append(template_ec2 % (i, cost, job["Ec2InstanceType"], "ondemand", job["OdPrice"], "spot", job["SpotPrice"], wtime))
         
-        cost = disk_size * job_summary["EbsPrice"] * wtime / 24 / 30
+        cost = disk_size * task_summary["EbsPrice"] * wtime / 24 / 30
         total_cost += cost
-        items.append(template_ebs % (i, cost, disk_size, job_summary["EbsPrice"], wtime))
+        items.append(template_ebs % (i, cost, disk_size, task_summary["EbsPrice"], wtime))
         
         job["Start"] = ecsub.tools.datetime_to_standardformat(job["Start"])
         job["End"] = ecsub.tools.datetime_to_standardformat(job["End"])
@@ -463,16 +463,16 @@ def _save_summary_file(job_summary, print_cost):
         i += 1
         
     if print_cost:        
-        message = "The cost of this job is $%.3f. \n%s" % (total_cost, "\n".join(items))
-        print (ecsub.tools.info_message (job_summary["ClusterName"], job_summary["No"], message))
+        message = "The cost of this task is $%.3f. \n%s" % (total_cost, "\n".join(items))
+        print (ecsub.tools.info_message (task_summary["ClusterName"], task_summary["No"], message))
     
-    job_summary["Price"] = "%.5f" % (total_cost)
-    log_file = "%s/log/summary.%03d.log" % (job_summary["Wdir"], job_summary["No"]) 
-    json.dump(job_summary, open(log_file, "w"), indent=4, separators=(',', ': '), sort_keys=True)
+    task_summary["Price"] = "%.5f" % (total_cost)
+    log_file = "%s/log/summary.%03d.log" % (task_summary["Wdir"], task_summary["No"]) 
+    json.dump(task_summary, open(log_file, "w"), indent=4, separators=(',', ': '), sort_keys=True)
     
 def submit_task(ctx, thread_name, aws_instance, no, task_params, spot):
     
-    job_summary = {
+    task_summary = {
         "AccountId": aws_instance.aws_accountid,
         "AmiId": aws_instance.aws_ami_id,
         "AutoKey": aws_instance.aws_key_auto,
@@ -502,12 +502,12 @@ def submit_task(ctx, thread_name, aws_instance, no, task_params, spot):
         "Jobs":[]
     }
     if aws_instance.flyaway == False:
-        _save_summary_file(job_summary, False)
+        _save_summary_file(task_summary, False)
 
     if spot:
         start_t = datetime.datetime.now()
         (exit_code, task_log, retry) = submit_task_spot(aws_instance, no)
-        job_summary["Jobs"].append(_set_job_info(
+        task_summary["Jobs"].append(_set_job_info(
             aws_instance.task_param[no], start_t, datetime.datetime.now(), task_log, exit_code
         ))
         
@@ -515,22 +515,22 @@ def submit_task(ctx, thread_name, aws_instance, no, task_params, spot):
             start_t = datetime.datetime.now()
             aws_instance.task_param[no]["aws_ec2_instance_type"] = aws_instance.aws_ec2_instance_type_list[0]
             (exit_code, task_log) = submit_task_ondemand(aws_instance, no)
-            job_summary["Jobs"].append(_set_job_info(
+            task_summary["Jobs"].append(_set_job_info(
                 aws_instance.task_param[no], start_t, datetime.datetime.now(), task_log, exit_code
             ))
     else:
         start_t = datetime.datetime.now()
         (exit_code, task_log) = submit_task_ondemand(aws_instance, no)
-        job_summary["Jobs"].append(_set_job_info(
+        task_summary["Jobs"].append(_set_job_info(
             aws_instance.task_param[no], start_t, datetime.datetime.now(), task_log, exit_code
         ))
     
-    job_summary["SubnetId"] = aws_instance.aws_subnet_id
-    job_summary["End"] = ecsub.tools.datetime_to_standardformat(datetime.datetime.now())
+    task_summary["SubnetId"] = aws_instance.aws_subnet_id
+    task_summary["End"] = ecsub.tools.datetime_to_standardformat(datetime.datetime.now())
     
     if aws_instance.flyaway == False:
         ecsub.metrics.entry_point(aws_instance.wdir, no)
-        _save_summary_file(job_summary, True)
+        _save_summary_file(task_summary, True)
        
     #exit (exit_code)
     ctx[thread_name] = exit_code

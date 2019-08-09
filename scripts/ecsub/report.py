@@ -91,11 +91,11 @@ def _load_summary(params, dic_summary, header):
             else:
                 info["spot"] = "F"
                 
-            info["job_startAt"] = data["Start"]
-            info["job_endAt"] = data["End"]
-            if info["job_endAt"] == None:
-                info["job_endAt"] = ""
-            info["disk_size"] = str(data["Ec2InstanceDiskSize"])
+            info["task_startAt"] = data["Start"]
+            info["task_endAt"] = data["End"]
+            if info["task_endAt"] == None:
+                info["task_endAt"] = ""
+            info["disk_size"] = str(data["Ec2InstanceDiskSize"] + data["Ec2InstanceRootDiskSize"] + 8)
             if "Price" in data:
                 info["price"] = str(data["Price"])
             
@@ -135,8 +135,8 @@ def main(params):
         "taskname",
         "no",
         "spot",
-        "job_startAt",
-        "job_endAt",
+        "task_startAt",
+        "task_endAt",
         "instance_type",
         "cpu",
         "memory",
