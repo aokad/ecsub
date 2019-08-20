@@ -748,6 +748,9 @@ def set_param(args, env_options = None):
     
     for key in args.__dict__.keys():
         params[key] = args.__dict__[key]
+    
+    if env_options != None:
+        params["env_options"] = env_options
         
     return params
 
