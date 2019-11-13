@@ -15,9 +15,6 @@ TITLE = "ecsub-logs"
 def _timestamp(text):
    return datetime.datetime.fromtimestamp(int(text)/1000).strftime("%Y%m%d_%H%M%S")
 
-def _to_log_prefix(prefix):
-    return "ecsub-" + prefix
-
 def _to_cluster_name(log_group_name):
     cluster_name = re.sub(r'^ecsub-', "", log_group_name)
     print (ecsub.tools.info_message(TITLE, None, "cluser-name: %s" % (cluster_name)))
@@ -48,12 +45,12 @@ def _describe_log_groups(logGroupNamePrefix, nextToken, limit):
     
     return groups
 
-def _describe_log_streams(logGroupName, nextToken, limit, logStreamNamePrefix='ecsub'):
+def _describe_log_streams(logGroupName, logStreamNamePrefix, nextToken, limit):
     
     if nextToken == None:
         mesg = ecsub.tools.info_message(TITLE, None, 
-            "boto3.client('logs').describe_log_streams(logGroupName = '%s', logStreamNamePrefix = 'ecsub', limit = %d)" % (
-                logGroupName, limit
+            "boto3.client('logs').describe_log_streams(logGroupName = '%s', logStreamNamePrefix = '%s', limit = %d)" % (
+                logGroupName, logStreamNamePrefix, limit
             )
         )
         print (mesg)
@@ -120,29 +117,6 @@ def _get_log_events_tail(logGroupName, logStreamName):
 
     return events
 
-def _specify_log_group(group_name_prefix):
-
-    groups = _describe_log_groups(group_name_prefix, None, 50)
-    
-    if len(groups["logGroups"]) == 0:
-        mesg = ecsub.tools.error_message(TITLE, None, 
-                "logGroupName-Prefix '%s' is none." % (group_name_prefix)
-            )
-        print (mesg)
-        return None
-    if len(groups["logGroups"]) > 1:
-        group_names = []
-        for g in groups["logGroups"]:
-            group_names.append(g["logGroupName"])
-        mesg = ecsub.tools.error_message(TITLE, None, 
-                "logGroupName-Prefix '%s' is unspecified. \n%s" % (group_name_prefix, "\n".join(group_names))
-            )
-        print (mesg)
-        
-        return None
-        
-    return groups["logGroups"][0]
-    
 # specify Log stream
 def _download_log_stream(log_group_name, stream, wdir, cluster_name, tail = False):
 
@@ -178,44 +152,18 @@ def _download_log_stream(log_group_name, stream, wdir, cluster_name, tail = Fals
                 f.write("%s\t%s\n" % (_timestamp(event["timestamp"]), event["message"].encode('utf-8')))
         
     f.close()
-        
-def download_log(wdir, prefix, tail):
-        
-    log_group_name = _to_log_prefix(prefix)
-    
-    group = _specify_log_group(log_group_name)
-    if group == None:
-        return
-    
-    cluster_name = _to_cluster_name(group["logGroupName"])
-     
-    stream = None
-    while(1):
-        if stream != None and not "nextToken" in stream.keys():
-            break
 
-        if stream == None:
-            stream = _describe_log_streams(group["logGroupName"], None, 1)
-        else:
-            stream = _describe_log_streams(group["logGroupName"], stream["nextToken"], 1)
-        
-        if len(stream["logStreams"]) == 0:
-            break
-        
-        _download_log_stream(group["logGroupName"], stream["logStreams"][0], wdir, cluster_name, tail)
-            
-def download_logs(wdir, prefix, tail):
+def download_logs(wdir, log_group_prefix, log_stream_prefix, tail):
     
-    group_name_prefix = _to_log_prefix(prefix)
     group = None
     while(1):
         if group != None and not "nextToken" in group.keys():
             break
 
         if group == None:
-            group = _describe_log_groups(group_name_prefix, None, 1)
+            group = _describe_log_groups(log_group_prefix, None, 1)
         else:
-            group = _describe_log_groups(group_name_prefix, group["nextToken"], 1)
+            group = _describe_log_groups(log_group_prefix, group["nextToken"], 1)
         
         if len(group["logGroups"]) == 0:
             break
@@ -227,125 +175,118 @@ def download_logs(wdir, prefix, tail):
                 break
 
             if stream == None:
-                stream = _describe_log_streams(group["logGroups"][0]["logGroupName"], None, 1)
+                stream = _describe_log_streams(group["logGroups"][0]["logGroupName"], log_stream_prefix, None, 1)
             else:
-                stream = _describe_log_streams(group["logGroups"][0]["logGroupName"], stream["nextToken"], 1)
+                stream = _describe_log_streams(group["logGroups"][0]["logGroupName"], log_stream_prefix, stream["nextToken"], 1)
             
             if len(stream["logStreams"]) == 0:
                 break
             
             _download_log_stream(group["logGroups"][0]["logGroupName"], stream["logStreams"][0], wdir, cluster_name, tail)
 
-# specify Log Group
-def remove_log(wdir, prefix):
+def remove_log_groups(log_group_prefix):
     
-    group_name_prefix = _to_log_prefix(prefix)
-    group = _specify_log_group(group_name_prefix)
-    if group == None:
-        return
-        
-    streams = _describe_log_streams(group["logGroupName"], None, 50)
-    for stream in streams["logStreams"]:
-        mesg = ecsub.tools.info_message(TITLE, None, 
-            "boto3.client('logs').delete_log_stream(logGroupName = '%s', logStreamName = '%s')" % (
-                group["logGroupName"], stream["logStreamName"]
-            )
-        )
-        print (mesg)
-        
-        boto3.client('logs').delete_log_stream(
-            logGroupName = group["logGroupName"],
-            logStreamName = stream["logStreamName"]
-        )
-
-    streams = _describe_log_streams(group["logGroupName"], None, 50)
-    if len(streams["logStreams"]) == 0:
-        mesg = ecsub.tools.info_message(TITLE, None, 
-            "boto3.client('logs').delete_log_group(logGroupName = '%s')" % (
-                group["logGroupName"]
-            )
-        )
-        print (mesg)
-        
-        boto3.client('logs').delete_log_group(
-            logGroupName = group["logGroupName"]
-        )
-    else:
-        mesg = ecsub.tools.error_message(TITLE, None, 
-                "Could not delete logGroupName '%s'." % (group_name_prefix)
-            )
-        print (mesg)
-                
-def remove_logs(wdir, prefix):
-    
-    group_name_prefix = _to_log_prefix(prefix)
-    safe_groups = []
     while(1):
-        groups = _describe_log_groups(group_name_prefix, None, 50)
+        groups = _describe_log_groups(log_group_prefix, None, 50)
         
         if len(groups["logGroups"]) == 0:
             break
         
-        count = 0
         for group in groups["logGroups"]:
-            if group["logGroupName"] in safe_groups:
-                count += 1
-                continue
-        if count == len(safe_groups) and len(safe_groups) > 0:
-            break
-        
-        for group in groups["logGroups"]:
+            mesg = ecsub.tools.info_message(TITLE, None, 
+                "boto3.client('logs').delete_log_group(logGroupName = '%s')" % (
+                    group["logGroupName"]
+                )
+            )
+            print (mesg)
             
-            streams = _describe_log_streams(group["logGroupName"], None, 50)
-            for stream in streams["logStreams"]:
-                mesg = ecsub.tools.info_message(TITLE, None, 
-                    "boto3.client('logs').delete_log_stream(logGroupName = '%s', logStreamName = '%s')" % (
-                        group["logGroupName"], stream["logStreamName"]
-                    )
-                )
-                print (mesg)
+            boto3.client('logs').delete_log_group(
+                logGroupName = group["logGroupName"]
+            )
+            
                 
-                boto3.client('logs').delete_log_stream(
-                    logGroupName = group["logGroupName"],
-                    logStreamName = stream["logStreamName"]
+def remove_log_streams(log_group_name, log_stream_prefix):
+    
+    groups = _describe_log_groups(log_group_name, None, 50)
+    
+    find = False
+    for group in groups["logGroups"]:
+        if group["logGroupName"] == log_group_name:
+            find = True
+            break
+    if not find:
+        print ("not find log-group-name: %s" % (log_group_name))
+        return
+    
+    while(1):
+        streams = _describe_log_streams(log_group_name, log_stream_prefix, None, 50)
+        if len(streams["logStreams"]) == 0:
+            mesg = ecsub.tools.info_message(TITLE, None, 
+                "boto3.client('logs').delete_log_group(logGroupName = '%s')" % (
+                    group["logGroupName"]
                 )
+            )
+            print (mesg)
+            break
+
+        for stream in streams["logStreams"]:
+            mesg = ecsub.tools.info_message(TITLE, None, 
+                "boto3.client('logs').delete_log_stream(logGroupName = '%s', logStreamName = '%s')" % (
+                    log_group_name, stream["logStreamName"]
+                )
+            )
+            print (mesg)
         
-            streams = _describe_log_streams(group["logGroupName"], None, 50)
-            if len(streams["logStreams"]) == 0:
-                mesg = ecsub.tools.info_message(TITLE, None, 
-                    "boto3.client('logs').delete_log_group(logGroupName = '%s')" % (
-                        group["logGroupName"]
-                    )
-                )
-                print (mesg)
-                
-                boto3.client('logs').delete_log_group(
-                    logGroupName = group["logGroupName"]
-                )
-            else:
-                safe_groups.append(group["logGroupName"])
+            boto3.client('logs').delete_log_stream(
+                logGroupName = log_group_name,
+                logStreamName = stream["logStreamName"]
+            )
             
 def main(params):
     
-    if params["download"]:
+    if params["mode"] == "download":
+        log_group = "ecsub-"
+        if params["log_group_prefix"] != "":
+            log_group = params["log_group_prefix"]
+        elif params["log_group_name"] != "":
+            log_group = params["log_group_name"]
+            
+        if params["log_stream_prefix"] == "":
+            params["log_stream_prefix"] = "ecsub/"
+        
         print (ecsub.tools.info_message(TITLE, None, "=== download log files start ==="))
-        download_logs(params["wdir"], params["prefix"], params["tail"])
+        download_logs(params["wdir"], log_group, params["log_stream_prefix"], params["tail"])
         print (ecsub.tools.info_message(TITLE, None, "=== download log files end ==="))
     
-    if params["remove"]:
+    if params["mode"] == "remove-log-group":
+        if params["log_group_prefix"] == "":
+            print ("set log-group-prefix")
+            return
+        
+        print (ecsub.tools.info_message(TITLE, None, "=== remove log groups start ==="))
+        remove_log_groups(params["log_group_prefix"])
+        print (ecsub.tools.info_message(TITLE, None, "=== remove log groups end ==="))
+    
+    elif params["mode"] == "remove-log-stream":
+        if params["log_group_name"] == "":
+            print ("set log-group-name")
+            return
+    
+        if params["log_stream_prefix"] == "":
+            print ("set log-stream-prefix")
+            return
+        
         print (ecsub.tools.info_message(TITLE, None, "=== remove log streams start ==="))
-        remove_logs(params["wdir"], params["prefix"])
+        remove_log_streams(params["log_group_name"], params["log_stream_prefix"])
         print (ecsub.tools.info_message(TITLE, None, "=== remove log streams end ==="))
     
-    if params["download"] == False and  params["remove"] == False:
-        print (ecsub.tools.warning_message(TITLE, None, "Set either --rm (remove) or --dw (download) or both."))
-        
 def entry_point(args):
     params = {
         "wdir": args.wdir,
-        "prefix": args.prefix,
-        "remove": args.rm,
-        "download": args.dw,
+        "log_group_prefix": args.log_group_prefix,
+        "log_group_name": args.log_group_name,
+        "log_stream_prefix": args.log_stream_prefix,
+        "mode": args.mode,
         "tail": args.tail,
     }
     main(params)

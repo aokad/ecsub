@@ -562,7 +562,7 @@ def main(params):
         # set cluster_name
         params["cluster_name"] = params["task_name"]
         if params["cluster_name"] == "":
-            params["cluster_name"] = os.path.splitext(os.path.basename(params["tasks"]))[0] \
+            params["cluster_name"] = os.path.splitext(os.path.basename(params["tasks"]))[0].replace(".", "_") \
                 + '-' \
                 + ''.join([random.choice(string.ascii_letters + string.digits) for i in range(5)])
                 

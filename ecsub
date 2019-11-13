@@ -94,10 +94,11 @@ def main():
     ##########
     # log stream 
     log_parser = subparsers.add_parser("logs", help = "download logs")
+    log_parser.add_argument("mode", choices=['download', 'remove-log-group', 'remove-log-stream'], help = "mode")
     log_parser.add_argument("--wdir", metavar = "path/to/dir", help = "{PATH} when 'ecsub submit --wdir {PATH}'", type = str, default = "./")
-    log_parser.add_argument("--prefix", metavar = "task-name", help = "prefix of LogGroupName in AWS CloudWatch", type = str, default = "")
-    log_parser.add_argument("--rm", help = "flag for remove from AWS", action = 'store_true')
-    log_parser.add_argument("--dw", help = "flag for download from AWS", action = 'store_true')
+    log_parser.add_argument("--log-group-prefix", metavar = "log-group-name-prefix", help = "prefix of LogGroupName in AWS CloudWatch", type = str, default = "")
+    log_parser.add_argument("--log-group-name", metavar = "log-group-name", help = "LogGroupName in AWS CloudWatch", type = str, default = "")
+    log_parser.add_argument("--log-stream-prefix", metavar = "log-stream-name-prefix", help = "prefix of LogStreamName in AWS CloudWatch", type = str, default = "")
     log_parser.add_argument("--tail", help = "flag for download from AWS", action = 'store_true')
     log_parser.set_defaults(func = log.entry_point)
 

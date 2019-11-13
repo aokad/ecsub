@@ -198,21 +198,40 @@ ecsub creates logs on AWS CloudWatch.
 If you need, you can download log-files to local directory, and remove log-streams from AWS.
 
 ```
-$ ecsub logs --help
-usage: ecsub logs [-h] [--wdir path/to/dir] [--prefix task-name] [--rm] [--dw]
-
-optional arguments:
-  -h, --help          show this help message and exit
-  --wdir path/to/dir  {PATH} when 'ecsub submit --wdir {PATH}'
-  --prefix task-name  prefix of LogGroupName in AWS CloudWatch
-  --rm                flag for remove from AWS
-  --dw                flag for download from AWS
+$ ecsub logs
+usage: ecsub logs [-h] [--wdir path/to/dir]
+                  [--log-group-prefix ecsub-task-wordcount]
+                  [--log-group-name ecsub-task-wordcount-aBc012]
+                  [--log-stream-prefix ecsub/log-stream-name-prefix] [--tail]
+                  {download,remove-log-group,remove-log-stream}
 ```
 
 For example,
 
+1) download log
+
 ```Bash
-ecsub logs --wdir /tmp/ecsub --prefix tasks-wordcount --dw
+# all streams
+ecsub logs download --wdir /tmp/ecsub --log-group-prefix ecsub-task-wordcount
+
+# specify streams
+ecsub logs download --wdir /tmp/ecsub --log-group-name ecsub-task-wordcount-aBc012 --log-stream-prefix ecsub/task-wordcount-aBc012_tasks/xxx
+
+# last event
+ecsub logs download --wdir /tmp/ecsub --log-group-name ecsub-task-wordcount --tail
+ecsub logs download --wdir /tmp/ecsub --log-group-name ecsub-task-wordcount-aBc012 --log-stream-prefix ecsub/task-wordcount-aBc012_tasks/xxx --tail
+```
+
+2) remove log-groups
+
+```Bash
+ecsub logs remove-log-group --log-group-prefix ecsub-task-wordcount
+```
+
+3) remove log-streams
+
+```Bash
+ecsub logs remove-log-stream --log-group-name ecsub-task-wordcount-aBc012 --log-stream-prefix ecsub/task-wordcount-aBc012_tasks/xxx
 ```
 
 ### 4) Delete jobs.
