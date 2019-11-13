@@ -52,6 +52,7 @@ class SubmitTest(unittest.TestCase):
             "--aws-ec2-instance-type", "t2.micro",
             "--disk-size", "1",
             "--aws-s3-bucket", "s3://travisci-work/wordcount/output/",
+            "--aws-log-group-name", "ecsub-travis",
         ]
         subprocess.check_call(['python', 'ecsub', 'submit'] + options)
     
@@ -66,6 +67,7 @@ class SubmitTest(unittest.TestCase):
             "--disk-size", "1",
             "--aws-s3-bucket", "s3://travisci-work/wordcount/output/",
             "--spot",
+            "--aws-log-group-name", "ecsub-travis",
         ]
         subprocess.check_call(['python', 'ecsub', 'submit'] + options)
     
@@ -77,6 +79,25 @@ class SubmitTest(unittest.TestCase):
         subprocess.check_call(['python', 'ecsub', 'report'] + options)
     
     def test4_01_logs(self):
+        
+        after = glob.glob(self.WDIR + "/*")
+        
+        for b in self.BEFORE:
+            if b in after:
+                after.remove(b)
+        
+        for dir_name in after:
+            cluster_name = os.path.basename(dir_name)
+            
+            # download and remove
+            options = [
+                "--wdir", self.WDIR,
+                "--prefix", cluster_name,
+                "--dw", "--tail"
+            ]
+            subprocess.check_call(['python', 'ecsub', 'logs'] + options)
+    
+    def test4_02_logs(self):
         
         after = glob.glob(self.WDIR + "/*")
         

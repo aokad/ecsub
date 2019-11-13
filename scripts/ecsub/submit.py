@@ -789,6 +789,7 @@ class Argments:
         self.disk_size = 22
         self.processes = 20
         self.aws_security_group_id = ""
+        self.aws_log_group_name = ""
         self.aws_key_name = ""
         self.aws_subnet_id = ""
         self.spot = False

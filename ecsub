@@ -42,6 +42,7 @@ def main():
         submit_parser.add_argument("--processes", metavar = 20, help = "maximum multi processes", type = int, default = default.processes)
         submit_parser.add_argument("--aws-security-group-id", metavar = "sg-ab123456", help = "AWS your security_group_id", type = str, default =  default.aws_security_group_id)
         submit_parser.add_argument("--aws-key-name", metavar = "key-123ab", help = "AWS your key pair name", type = str, default = default.aws_key_name)
+        submit_parser.add_argument("--aws-log-group-name", metavar = "lg-name", help = "AWS Cloudwatch Logs Log-group-name", type = str, default = default.aws_log_group_name)
         submit_parser.add_argument("--aws-subnet-id", metavar = "subnet-123456ab", help = "AWS subnet_id", type = str, default = default.aws_subnet_id)
         submit_parser.add_argument("--spot", help = "[spot] use spot instance", action = 'store_true')
         submit_parser.add_argument("--retry-od", help = "[spot] In case of failure, retry on demand instance", action = 'store_true')
@@ -97,6 +98,7 @@ def main():
     log_parser.add_argument("--prefix", metavar = "task-name", help = "prefix of LogGroupName in AWS CloudWatch", type = str, default = "")
     log_parser.add_argument("--rm", help = "flag for remove from AWS", action = 'store_true')
     log_parser.add_argument("--dw", help = "flag for download from AWS", action = 'store_true')
+    log_parser.add_argument("--tail", help = "flag for download from AWS", action = 'store_true')
     log_parser.set_defaults(func = log.entry_point)
 
     argv = sys.argv[1:]

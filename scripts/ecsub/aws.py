@@ -42,7 +42,9 @@ class Aws_ecsub_control:
         if self.setup_container_cmd == "":
             self.setup_container_cmd = "apt update; apt install -y python-pip; pip install awscli --upgrade; aws configure list"
         self.dind = params["dind"]
-        self.log_group_name = "ecsub-" + self.cluster_name
+        self.log_group_name = params["aws_log_group_name"]
+        if self.log_group_name == "":
+            self.log_group_name = "ecsub-" + self.cluster_name
         
         self.aws_ami_id = ecsub.aws_config.get_ami_id()
         self.aws_ec2_instance_type_list = params["aws_ec2_instance_type_list"]

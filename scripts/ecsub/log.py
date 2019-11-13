@@ -102,6 +102,24 @@ def _get_log_events(logGroupName, logStreamName, nextToken):
 
     return events
 
+def _get_log_events_tail(logGroupName, logStreamName):
+    
+    mesg = ecsub.tools.info_message(TITLE, None, 
+        "boto3.client('logs').get_log_events(logGroupName = '%s', logStreamName = '%s', startFromHead = True)" % (
+            logGroupName, logStreamName
+        )
+    )
+    print (mesg)
+    
+    events = boto3.client('logs').get_log_events(
+        logGroupName = logGroupName,
+        logStreamName = logStreamName,
+        startFromHead = False
+    )
+    print (ecsub.tools.info_message(TITLE, None, "log-events: %d" % (len(events["events"]))))
+
+    return events
+
 def _specify_log_group(group_name_prefix):
 
     groups = _describe_log_groups(group_name_prefix, None, 50)
@@ -126,33 +144,42 @@ def _specify_log_group(group_name_prefix):
     return groups["logGroups"][0]
     
 # specify Log stream
-def _download_log_stream(log_group_name, stream, wdir, cluster_name):
+def _download_log_stream(log_group_name, stream, wdir, cluster_name, tail = False):
 
     output_dir = "%s/%s/cloud_watch" % (wdir.rstrip("/"), cluster_name)
     if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-        
+        try:
+            os.makedirs(output_dir)
+        except Exception:
+            pass
+            
     f = open("%s/%s-%s.log" % (
         output_dir,
         stream["logStreamName"].split("/")[1],
         _timestamp(stream["creationTime"])), "w")
     
-    events = None
-    while(1):
-        if events != None and len(events["events"]) == 0:
-            break
-
-        if events == None:
-            events = _get_log_events(log_group_name, stream["logStreamName"], None)
-        else:
-            events = _get_log_events(log_group_name, stream["logStreamName"], events["nextForwardToken"])
-            
+    if tail:
+        events = _get_log_events_tail(log_group_name, stream["logStreamName"])
+        #for event in reversed(events["events"]):
         for event in events["events"]:
             f.write("%s\t%s\n" % (_timestamp(event["timestamp"]), event["message"].encode('utf-8')))
+    else:
+        events = None
+        while(1):
+            if events != None and len(events["events"]) == 0:
+                break
+    
+            if events == None:
+                events = _get_log_events(log_group_name, stream["logStreamName"], None)
+            else:
+                events = _get_log_events(log_group_name, stream["logStreamName"], events["nextForwardToken"])
             
+            for event in events["events"]:
+                f.write("%s\t%s\n" % (_timestamp(event["timestamp"]), event["message"].encode('utf-8')))
+        
     f.close()
         
-def download_log(wdir, prefix):
+def download_log(wdir, prefix, tail):
         
     log_group_name = _to_log_prefix(prefix)
     
@@ -175,9 +202,9 @@ def download_log(wdir, prefix):
         if len(stream["logStreams"]) == 0:
             break
         
-        _download_log_stream(group["logGroupName"], stream["logStreams"][0], wdir, cluster_name)
+        _download_log_stream(group["logGroupName"], stream["logStreams"][0], wdir, cluster_name, tail)
             
-def download_logs(wdir, prefix):
+def download_logs(wdir, prefix, tail):
     
     group_name_prefix = _to_log_prefix(prefix)
     group = None
@@ -207,7 +234,7 @@ def download_logs(wdir, prefix):
             if len(stream["logStreams"]) == 0:
                 break
             
-            _download_log_stream(group["logGroups"][0]["logGroupName"], stream["logStreams"][0], wdir, cluster_name)
+            _download_log_stream(group["logGroups"][0]["logGroupName"], stream["logStreams"][0], wdir, cluster_name, tail)
 
 # specify Log Group
 def remove_log(wdir, prefix):
@@ -302,7 +329,7 @@ def main(params):
     
     if params["download"]:
         print (ecsub.tools.info_message(TITLE, None, "=== download log files start ==="))
-        download_logs(params["wdir"], params["prefix"])
+        download_logs(params["wdir"], params["prefix"], params["tail"])
         print (ecsub.tools.info_message(TITLE, None, "=== download log files end ==="))
     
     if params["remove"]:
@@ -319,6 +346,7 @@ def entry_point(args):
         "prefix": args.prefix,
         "remove": args.rm,
         "download": args.dw,
+        "tail": args.tail,
     }
     main(params)
     
