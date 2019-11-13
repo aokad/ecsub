@@ -18,7 +18,13 @@ class ShortTest(unittest.TestCase):
         subprocess.check_call(['ecsub', 'report'])
 
     def test3_01_logs(self):
-        subprocess.check_call(['ecsub', 'logs'])
+        subprocess.check_call(['ecsub', 'logs', 'download'])
+
+    def test3_02_logs(self):
+        subprocess.check_call(['ecsub', 'logs', 'remove-log-group'])
+
+    def test3_03_logs(self):
+        subprocess.check_call(['ecsub', 'logs', 'remove-log-stream'])
 
 # do not add to suite
 #def suite():

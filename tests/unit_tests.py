@@ -93,7 +93,7 @@ class SubmitTest(unittest.TestCase):
             options = [
                 "download",
                 "--wdir", self.WDIR,
-                "--log-group-name-prefix", "ecsub-travis"
+                "--log-group-prefix", "ecsub-travis"
             ]
             subprocess.check_call(['python', 'ecsub', 'logs'] + options)
             
@@ -112,7 +112,7 @@ class SubmitTest(unittest.TestCase):
             options = [
                 "download",
                 "--wdir", self.WDIR,
-                "--log-group-name-prefix", "ecsub-travis",
+                "--log-group-prefix", "ecsub-travis",
                 "--tail"
             ]
             subprocess.check_call(['python', 'ecsub', 'logs'] + options)
