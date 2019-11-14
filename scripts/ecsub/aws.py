@@ -473,6 +473,7 @@ class Aws_ecsub_control:
                 self._subprocess_call(cmd)
                 time.sleep(5)
             else:
+                print(ecsub.tools.info_message (self.cluster_name, None, "aws logs describe-log-groups --log-group-name-prefix {log_group_name} ... ok".format(log_group_name = self.log_group_name)))
                 break
 
         if int(response) == 0:
