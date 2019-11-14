@@ -52,7 +52,7 @@ class SubmitTest(unittest.TestCase):
             "--aws-ec2-instance-type", "t2.micro",
             "--disk-size", "1",
             "--aws-s3-bucket", "s3://travisci-work/wordcount/output/",
-            "--aws-log-group-name", "ecsub-travis",
+            "--aws-log-group-name", "ecsub-travis1",
         ]
         subprocess.check_call(['python', 'ecsub', 'submit'] + options)
     
@@ -67,7 +67,7 @@ class SubmitTest(unittest.TestCase):
             "--disk-size", "1",
             "--aws-s3-bucket", "s3://travisci-work/wordcount/output/",
             "--spot",
-            "--aws-log-group-name", "ecsub-travis",
+            "--aws-log-group-name", "ecsub-travis2",
         ]
         subprocess.check_call(['python', 'ecsub', 'submit'] + options)
     
@@ -132,7 +132,7 @@ class SubmitTest(unittest.TestCase):
             options = [
                 "download",
                 "--wdir", self.WDIR,
-                "--log-group-name", "ecsub-travis",
+                "--log-group-name", "ecsub-travis1",
                 "--log-stream-prefix", "ecsub/"
             ]
             subprocess.check_call(['python', 'ecsub', 'logs'] + options)
@@ -152,7 +152,7 @@ class SubmitTest(unittest.TestCase):
             options = [
                 "download",
                 "--wdir", self.WDIR,
-                "--log-group-name", "ecsub-travis",
+                "--log-group-name", "ecsub-travis1",
                 "--log-stream-prefix", "ecsub/",
                 "--tail"
             ]
@@ -172,7 +172,7 @@ class SubmitTest(unittest.TestCase):
             # download and remove
             options = [
                 "remove-log-stream",
-                "--log-group-name", "ecsub-travis",
+                "--log-group-name", "ecsub-travis1",
                 "--log-stream-prefix", "ecsub/"
             ]
             subprocess.check_call(['python', 'ecsub', 'logs'] + options)
@@ -191,7 +191,7 @@ class SubmitTest(unittest.TestCase):
             # download and remove
             options = [
                 "remove-log-group",
-                "--log-group-prefix", "ecsub-travis"
+                "--log-group-name", "ecsub-travis2"
             ]
             subprocess.check_call(['python', 'ecsub', 'logs'] + options)
     
