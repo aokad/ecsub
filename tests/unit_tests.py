@@ -132,15 +132,15 @@ class SubmitTest(unittest.TestCase):
         ]
         subprocess.check_call(['python', 'ecsub', 'logs'] + options)
     
-    def test5_01_delete(self):
-
-        cluster_name = glob.glob(self.WDIR + "/*")[0].split("/")[-1].rstrip("/")
-
-        options = [
-            cluster_name,
-            "--wdir", self.WDIR
-        ]
-        subprocess.check_call(['python', 'ecsub', 'delete'] + options)
+    #def test5_01_delete(self):
+    #
+    #    cluster_name = glob.glob(self.WDIR + "/*")[0].split("/")[-1].rstrip("/")
+    #
+    #    options = [
+    #        cluster_name,
+    #        "--wdir", self.WDIR
+    #    ]
+    #    subprocess.check_call(['python', 'ecsub', 'delete'] + options)
 
     def test6_01_encrypt(self):
     
