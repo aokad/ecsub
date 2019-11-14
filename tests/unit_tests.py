@@ -7,7 +7,6 @@ Created on Tue Jun 28 13:18:34 2016
 """
 
 import unittest
-import os
 import glob
 import subprocess
 import datetime
@@ -16,14 +15,12 @@ import ecsub.encrypt
 class SubmitTest(unittest.TestCase):
 
     WDIR = None
-    BEFORE = None
     START = None
     
     # init class
     @classmethod
     def setUpClass(self):
         self.WDIR = "/tmp/ecsub"
-        self.BEFORE = glob.glob(self.WDIR + "/*")
         self.START = datetime.datetime.now().strftime("%Y%m%d%H%M")
     
     # terminated class
@@ -79,137 +76,72 @@ class SubmitTest(unittest.TestCase):
         subprocess.check_call(['python', 'ecsub', 'report'] + options)
 
     def test4_01_logs(self):
-        
-        after = glob.glob(self.WDIR + "/*")
-        
-        for b in self.BEFORE:
-            if b in after:
-                after.remove(b)
-        
-        for dir_name in after:
-            cluster_name = os.path.basename(dir_name)
-            
-            # download and remove
-            options = [
-                "download",
-                "--wdir", self.WDIR,
-                "--log-group-prefix", "ecsub-travis"
-            ]
-            subprocess.check_call(['python', 'ecsub', 'logs'] + options)
+
+        options = [
+            "download",
+            "--wdir", self.WDIR,
+            "--log-group-prefix", "ecsub-travis"
+        ]
+        subprocess.check_call(['python', 'ecsub', 'logs'] + options)
             
     def test4_02_logs(self):
         
-        after = glob.glob(self.WDIR + "/*")
-        
-        for b in self.BEFORE:
-            if b in after:
-                after.remove(b)
-        
-        for dir_name in after:
-            cluster_name = os.path.basename(dir_name)
-            
-            # download and remove
-            options = [
-                "download",
-                "--wdir", self.WDIR,
-                "--log-group-prefix", "ecsub-travis",
-                "--tail"
-            ]
-            subprocess.check_call(['python', 'ecsub', 'logs'] + options)
+        options = [
+            "download",
+            "--wdir", self.WDIR,
+            "--log-group-prefix", "ecsub-travis",
+            "--tail"
+        ]
+        subprocess.check_call(['python', 'ecsub', 'logs'] + options)
             
     def test4_03_logs(self):
-        
-        after = glob.glob(self.WDIR + "/*")
-        
-        for b in self.BEFORE:
-            if b in after:
-                after.remove(b)
-        
-        for dir_name in after:
-            cluster_name = os.path.basename(dir_name)
-            
-            # download and remove
-            options = [
-                "download",
-                "--wdir", self.WDIR,
-                "--log-group-name", "ecsub-travis1",
-                "--log-stream-prefix", "ecsub/"
-            ]
-            subprocess.check_call(['python', 'ecsub', 'logs'] + options)
+
+        options = [
+            "download",
+            "--wdir", self.WDIR,
+            "--log-group-name", "ecsub-travis1",
+            "--log-stream-prefix", "ecsub/"
+        ]
+        subprocess.check_call(['python', 'ecsub', 'logs'] + options)
             
     def test4_04_logs(self):
-        
-        after = glob.glob(self.WDIR + "/*")
-        
-        for b in self.BEFORE:
-            if b in after:
-                after.remove(b)
-        
-        for dir_name in after:
-            cluster_name = os.path.basename(dir_name)
-            
-            # download and remove
-            options = [
-                "download",
-                "--wdir", self.WDIR,
-                "--log-group-name", "ecsub-travis1",
-                "--log-stream-prefix", "ecsub/",
-                "--tail"
-            ]
-            subprocess.check_call(['python', 'ecsub', 'logs'] + options)
+
+        options = [
+            "download",
+            "--wdir", self.WDIR,
+            "--log-group-name", "ecsub-travis1",
+            "--log-stream-prefix", "ecsub/",
+            "--tail"
+        ]
+        subprocess.check_call(['python', 'ecsub', 'logs'] + options)
 
     def test4_05_logs(self):
         
-        after = glob.glob(self.WDIR + "/*")
-        
-        for b in self.BEFORE:
-            if b in after:
-                after.remove(b)
-        
-        for dir_name in after:
-            cluster_name = os.path.basename(dir_name)
-            
-            # download and remove
-            options = [
-                "remove-log-stream",
-                "--log-group-name", "ecsub-travis1",
-                "--log-stream-prefix", "ecsub/"
-            ]
-            subprocess.check_call(['python', 'ecsub', 'logs'] + options)
+        options = [
+            "remove-log-stream",
+            "--log-group-name", "ecsub-travis1",
+            "--log-stream-prefix", "ecsub/"
+        ]
+        subprocess.check_call(['python', 'ecsub', 'logs'] + options)
             
     def test4_06_logs(self):
         
-        after = glob.glob(self.WDIR + "/*")
-        
-        for b in self.BEFORE:
-            if b in after:
-                after.remove(b)
-        
-        for dir_name in after:
-            cluster_name = os.path.basename(dir_name)
-            
-            # download and remove
-            options = [
-                "remove-log-group",
-                "--log-group-name", "ecsub-travis2"
-            ]
-            subprocess.check_call(['python', 'ecsub', 'logs'] + options)
+        options = [
+            "remove-log-group",
+            "--log-group-name", "ecsub-travis2"
+        ]
+        subprocess.check_call(['python', 'ecsub', 'logs'] + options)
     
     def test5_01_delete(self):
-    
-        after = glob.glob(self.WDIR + "/*")
-        for b in self.BEFORE:
-            if b in after:
-                after.remove(b)
-            
-        for dir_name in after:
-            cluster_name = os.path.basename(dir_name)
-            
-            options = [
-                "--wdir", self.WDIR
-            ]
-            subprocess.check_call(['python', 'ecsub', 'delete', cluster_name] + options)
-    
+
+        cluster_name = glob.glob(self.WDIR + "/*")[0].split("/")[-1].rstrip("/")
+
+        options = [
+            cluster_name,
+            "--wdir", self.WDIR
+        ]
+        subprocess.check_call(['python', 'ecsub', 'delete'] + options)
+
     def test6_01_encrypt(self):
     
         class Argments:
