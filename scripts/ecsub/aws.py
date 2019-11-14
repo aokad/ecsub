@@ -462,15 +462,22 @@ class Aws_ecsub_control:
         json.dump(containerDefinitions, open(json_file, "w"), indent=4, separators=(',', ': '))
         
         # check exists ECS cluster
-        cmd_template = "aws logs describe-log-groups --log-group-name-prefix {log_group_name} | grep logGroupName | grep \"{log_group_name}\" | wc -l"
-        cmd = cmd_template.format(setx = self.setx, log_group_name = self.log_group_name)
-        response = self._subprocess_communicate(cmd)
-        
-        if int(response) == 0:
-            cmd_template = "{setx}; aws logs create-log-group --log-group-name {log_group_name}"
+        for i in range(3):
+            cmd_template = "aws logs describe-log-groups --log-group-name-prefix {log_group_name} | grep logGroupName | grep \"{log_group_name}\" | wc -l"
             cmd = cmd_template.format(setx = self.setx, log_group_name = self.log_group_name)
-            self._subprocess_call(cmd)
+            response = self._subprocess_communicate(cmd)
+            
+            if int(response) == 0:
+                cmd_template = "{setx}; aws logs create-log-group --log-group-name {log_group_name}"
+                cmd = cmd_template.format(setx = self.setx, log_group_name = self.log_group_name)
+                self._subprocess_call(cmd)
+                time.sleep(5)
+            else:
+                break
 
+        if int(response) == 0:
+            return False
+            
         #  register-task-definition
         log_file = self._log_path("register-task-definition")
         cmd_template = "{setx}; aws ecs register-task-definition --cli-input-json file://{json} > {log}"
