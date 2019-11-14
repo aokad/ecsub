@@ -23,7 +23,7 @@ matrix:
       env: SUBMIT=0
     - name: "Python 2.7"
       python: 2.7
-      env: SUBMIT=1
+      env: SUBMIT=0
 
 before_script:
  - mkdir ~/.aws;
