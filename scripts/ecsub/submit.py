@@ -789,6 +789,7 @@ class Argments:
         self.aws_s3_bucket = ""
         self.aws_ec2_instance_type = ""
         self.aws_ec2_instance_type_list = ""
+        self.aws_ecs_instance_role_name = "ecsInstanceRole"
         self.disk_size = 22
         self.processes = 20
         self.aws_security_group_id = ""
