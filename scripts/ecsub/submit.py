@@ -310,7 +310,7 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
     for p in [s3_runsh, s3_script] + s3_setenv_list + s3_downloader_list + s3_uploader_list:
         pathes.append(p.replace("s3://", "", 1).strip("/").rstrip("/"))
     
-    if not_verify_bucket =- False:
+    if not_verify_bucket == False:
         invalid_files = check_inputfiles_collect(pathes, [], cluster_name)
         #invalid_files = check_inputfiles_partial(aws_instance, [s3_runsh, s3_script] + s3_setenv_list + s3_downloader_list + s3_uploader_list, [])
         if len(invalid_files) > 0:
