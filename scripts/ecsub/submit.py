@@ -279,7 +279,7 @@ def check_inputfiles(aws_instance, task_params, cluster_name, payer_buckets, wor
     
     return (regions, invalid_files)
 
-def upload_scripts(task_params, aws_instance, local_root, s3_root, script, cluster_name, shell, request_payer_bucket):
+def upload_scripts(task_params, aws_instance, local_root, s3_root, script, cluster_name, shell, request_payer_bucket, not_verify_bucket):
 
     runsh = local_root + "/run.sh"
     s3_runsh = s3_root + "/run.sh"
@@ -309,11 +309,12 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
     pathes = []
     for p in [s3_runsh, s3_script] + s3_setenv_list + s3_downloader_list + s3_uploader_list:
         pathes.append(p.replace("s3://", "", 1).strip("/").rstrip("/"))
-        
-    invalid_files = check_inputfiles_collect(pathes, [], cluster_name)
-    #invalid_files = check_inputfiles_partial(aws_instance, [s3_runsh, s3_script] + s3_setenv_list + s3_downloader_list + s3_uploader_list, [])
-    if len(invalid_files) > 0:
-        return False
+    
+    if not_verify_bucket =- False:
+        invalid_files = check_inputfiles_collect(pathes, [], cluster_name)
+        #invalid_files = check_inputfiles_partial(aws_instance, [s3_runsh, s3_script] + s3_setenv_list + s3_downloader_list + s3_uploader_list, [])
+        if len(invalid_files) > 0:
+            return False
     
     aws_instance.set_s3files(s3_runsh, s3_script, s3_setenv_list, s3_downloader_list, s3_uploader_list)
     
@@ -652,7 +653,8 @@ def main(params):
                        params["script"],
                        params["cluster_name"],
                        params["shell"],
-                       params["request_payer_bucket"]):
+                       params["request_payer_bucket"],
+                       params["not_verify_bucket"]):
             print (ecsub.tools.error_message (params["cluster_name"], None, "failure upload files to s3 bucket: %s." % (params["aws_s3_bucket"])))
             return 1
         
