@@ -100,6 +100,7 @@ usage: ecsub submit [-h] [--wdir path/to/dir] [--image docker/image:tag]
                     [--aws-key-name key-123ab]
                     [--aws-subnet-id subnet-123456ab] [--spot] [--retry-od]
                     [--request-payer-bucket bucket-name] [--ignore-location]
+                    [--not-verify-bucket]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -137,6 +138,7 @@ optional arguments:
                         Aware that you will be charged for downloading objects
                         in requester pays buckets. Split with ','
   --ignore-location     Ignore differences in location
+  --not-verify-bucket   Do not verify input pathes
 ```
 
 For example,

@@ -628,18 +628,19 @@ def main(params):
             return 1
 
         # check s3-files path
-        (regions, invalid_pathes) = check_inputfiles(aws_instance, task_params, params["cluster_name"], params["request_payer_bucket"], params["aws_s3_bucket"])
-        if len(regions) > 1:
-            if params["ignore_location"]:
-                print (ecsub.tools.warning_message (params["cluster_name"], None, "your task uses multipule regions '%s'." % (",".join(regions))))
-            else:
-                print (ecsub.tools.error_message (params["cluster_name"], None, "your task uses multipule regions '%s'." % (",".join(regions))))
+        if params["not_verify_bucket"] == False:
+            (regions, invalid_pathes) = check_inputfiles(aws_instance, task_params, params["cluster_name"], params["request_payer_bucket"], params["aws_s3_bucket"])
+            if len(regions) > 1:
+                if params["ignore_location"]:
+                    print (ecsub.tools.warning_message (params["cluster_name"], None, "your task uses multipule regions '%s'." % (",".join(regions))))
+                else:
+                    print (ecsub.tools.error_message (params["cluster_name"], None, "your task uses multipule regions '%s'." % (",".join(regions))))
+                    return 1
+                
+            for r in invalid_pathes:
+                print (ecsub.tools.error_message (params["cluster_name"], None, "input '%s' is not access." % (r)))
+            if len(invalid_pathes)> 0:
                 return 1
-            
-        for r in invalid_pathes:
-            print (ecsub.tools.error_message (params["cluster_name"], None, "input '%s' is not access." % (r)))
-        if len(invalid_pathes)> 0:
-            return 1
         
         # write task-scripts, and upload to S3
         local_script_dir = params["wdir"] + "/script"
@@ -796,6 +797,7 @@ class Argments:
         self.retry_od = False
         self.request_payer_bucket = ""
         self.ignore_location = False
+        self.not_verify_bucket = False
         
         # The followings are not optional
         self.root_disk_size = 22

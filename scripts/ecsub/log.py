@@ -21,101 +21,124 @@ def _to_cluster_name(log_group_name):
     return cluster_name
     
 def _describe_log_groups(logGroupNamePrefix, nextToken, limit):
-    
-    if nextToken == None:
-        mesg = ecsub.tools.info_message(TITLE, None, 
-            "boto3.client('logs').describe_log_groups(logGroupNamePrefix = '%s', limit = %d)" % (
-                logGroupNamePrefix, limit
-            )
-        )
-        print (mesg)
-    
-        groups = boto3.client('logs').describe_log_groups(
-            limit = limit, 
-            logGroupNamePrefix = logGroupNamePrefix
-        )
-        print (ecsub.tools.info_message(TITLE, None, "log-groups: %d" % (len(groups["logGroups"]))))
+
+    for i in range(3):
+        try:
+            if nextToken == None:
+                mesg = ecsub.tools.info_message(TITLE, None, 
+                    "boto3.client('logs').describe_log_groups(logGroupNamePrefix = '%s', limit = %d)" % (
+                        logGroupNamePrefix, limit
+                    )
+                )
+                print (mesg)
+            
+                groups = boto3.client('logs').describe_log_groups(
+                    limit = limit, 
+                    logGroupNamePrefix = logGroupNamePrefix
+                )
+                print (ecsub.tools.info_message(TITLE, None, "log-groups: %d" % (len(groups["logGroups"]))))
+                
+            else:
+                groups = boto3.client('logs').describe_log_groups(
+                    limit = limit, 
+                    logGroupNamePrefix = logGroupNamePrefix,
+                    nextToken = nextToken
+                )
+            
+            return groups
         
-    else:
-        groups = boto3.client('logs').describe_log_groups(
-            limit = limit, 
-            logGroupNamePrefix = logGroupNamePrefix,
-            nextToken = nextToken
-        )
-    
-    return groups
+        except Exception:
+            pass
+    return None
 
 def _describe_log_streams(logGroupName, logStreamNamePrefix, nextToken, limit):
     
-    if nextToken == None:
-        mesg = ecsub.tools.info_message(TITLE, None, 
-            "boto3.client('logs').describe_log_streams(logGroupName = '%s', logStreamNamePrefix = '%s', limit = %d)" % (
-                logGroupName, logStreamNamePrefix, limit
-            )
-        )
-        print (mesg)
+    for i in range(3):
+        try:
+            if nextToken == None:
+                mesg = ecsub.tools.info_message(TITLE, None, 
+                    "boto3.client('logs').describe_log_streams(logGroupName = '%s', logStreamNamePrefix = '%s', limit = %d)" % (
+                        logGroupName, logStreamNamePrefix, limit
+                    )
+                )
+                print (mesg)
+                
+                streams = boto3.client('logs').describe_log_streams(
+                    logGroupName = logGroupName,
+                    logStreamNamePrefix = logStreamNamePrefix,
+                    limit = limit
+                )
+                print (ecsub.tools.info_message(TITLE, None, "log-streams: %d" % (len(streams["logStreams"]))))
+                
+            else:
+                streams = boto3.client('logs').describe_log_streams(
+                    logGroupName = logGroupName,
+                    logStreamNamePrefix = logStreamNamePrefix,
+                    limit = limit,
+                    nextToken = nextToken
+                )
+            
+            return streams
         
-        streams = boto3.client('logs').describe_log_streams(
-            logGroupName = logGroupName,
-            logStreamNamePrefix = logStreamNamePrefix,
-            limit = limit
-        )
-        print (ecsub.tools.info_message(TITLE, None, "log-streams: %d" % (len(streams["logStreams"]))))
-        
-    else:
-        streams = boto3.client('logs').describe_log_streams(
-            logGroupName = logGroupName,
-            logStreamNamePrefix = logStreamNamePrefix,
-            limit = limit,
-            nextToken = nextToken
-        )
-    
-    return streams
+        except Exception:
+            pass
+    return None
 
 def _get_log_events(logGroupName, logStreamName, nextToken):
     
-    if nextToken == None:
-        mesg = ecsub.tools.info_message(TITLE, None, 
-            "boto3.client('logs').get_log_events(logGroupName = '%s', logStreamName = '%s', startFromHead = True)" % (
-                logGroupName, logStreamName
-            )
-        )
-        print (mesg)
+    for i in range(3):
+        try:
+            if nextToken == None:
+                mesg = ecsub.tools.info_message(TITLE, None, 
+                    "boto3.client('logs').get_log_events(logGroupName = '%s', logStreamName = '%s', startFromHead = True)" % (
+                        logGroupName, logStreamName
+                    )
+                )
+                print (mesg)
+                
+                events = boto3.client('logs').get_log_events(
+                    logGroupName = logGroupName,
+                    logStreamName = logStreamName,
+                    startFromHead = True
+                )
+                print (ecsub.tools.info_message(TITLE, None, "log-events: %d" % (len(events["events"]))))
+                
+            else:
+                events = boto3.client('logs').get_log_events(
+                    logGroupName = logGroupName,
+                    logStreamName = logStreamName,
+                    startFromHead = True,
+                    nextToken = nextToken
+                )
         
-        events = boto3.client('logs').get_log_events(
-            logGroupName = logGroupName,
-            logStreamName = logStreamName,
-            startFromHead = True
-        )
-        print (ecsub.tools.info_message(TITLE, None, "log-events: %d" % (len(events["events"]))))
+            return events
         
-    else:
-        events = boto3.client('logs').get_log_events(
-            logGroupName = logGroupName,
-            logStreamName = logStreamName,
-            startFromHead = True,
-            nextToken = nextToken
-        )
-
-    return events
+        except Exception:
+            pass
+    return None
 
 def _get_log_events_tail(logGroupName, logStreamName):
-    
-    mesg = ecsub.tools.info_message(TITLE, None, 
-        "boto3.client('logs').get_log_events(logGroupName = '%s', logStreamName = '%s', startFromHead = True)" % (
-            logGroupName, logStreamName
-        )
-    )
-    print (mesg)
-    
-    events = boto3.client('logs').get_log_events(
-        logGroupName = logGroupName,
-        logStreamName = logStreamName,
-        startFromHead = False
-    )
-    print (ecsub.tools.info_message(TITLE, None, "log-events: %d" % (len(events["events"]))))
 
-    return events
+    for i in range(3):
+        try:
+            mesg = ecsub.tools.info_message(TITLE, None, 
+                "boto3.client('logs').get_log_events(logGroupName = '%s', logStreamName = '%s', startFromHead = True)" % (
+                    logGroupName, logStreamName
+                )
+            )
+            print (mesg)
+            
+            events = boto3.client('logs').get_log_events(
+                logGroupName = logGroupName,
+                logStreamName = logStreamName,
+                startFromHead = False
+            )
+            print (ecsub.tools.info_message(TITLE, None, "log-events: %d" % (len(events["events"]))))
+        
+            return events
+        except Exception:
+            pass
+    return None
 
 # specify Log stream
 def _download_log_stream(log_group_name, stream, wdir, cluster_name, tail = False):
@@ -134,9 +157,9 @@ def _download_log_stream(log_group_name, stream, wdir, cluster_name, tail = Fals
     
     if tail:
         events = _get_log_events_tail(log_group_name, stream["logStreamName"])
-        #for event in reversed(events["events"]):
-        for event in events["events"]:
-            f.write("%s\t%s\n" % (_timestamp(event["timestamp"]), event["message"].encode('utf-8')))
+        if events  != None:
+            for event in events["events"]:
+                f.write("%s\t%s\n" % (_timestamp(event["timestamp"]), event["message"].encode('utf-8')))
     else:
         events = None
         while(1):
@@ -148,8 +171,9 @@ def _download_log_stream(log_group_name, stream, wdir, cluster_name, tail = Fals
             else:
                 events = _get_log_events(log_group_name, stream["logStreamName"], events["nextForwardToken"])
             
-            for event in events["events"]:
-                f.write("%s\t%s\n" % (_timestamp(event["timestamp"]), event["message"].encode('utf-8')))
+            if events  != None:
+                for event in events["events"]:
+                    f.write("%s\t%s\n" % (_timestamp(event["timestamp"]), event["message"].encode('utf-8')))
         
     f.close()
 
@@ -165,6 +189,8 @@ def download_logs(wdir, log_group_prefix, log_stream_prefix, tail):
         else:
             group = _describe_log_groups(log_group_prefix, group["nextToken"], 1)
         
+        if group == None:
+            break
         if len(group["logGroups"]) == 0:
             break
         
@@ -179,6 +205,8 @@ def download_logs(wdir, log_group_prefix, log_stream_prefix, tail):
             else:
                 stream = _describe_log_streams(group["logGroups"][0]["logGroupName"], log_stream_prefix, stream["nextToken"], 1)
             
+            if stream == None:
+                break
             if len(stream["logStreams"]) == 0:
                 break
             
@@ -188,27 +216,33 @@ def remove_log_groups(log_group_prefix):
     
     while(1):
         groups = _describe_log_groups(log_group_prefix, None, 50)
-        
+        if groups == None:
+            break
         if len(groups["logGroups"]) == 0:
             break
         
         for group in groups["logGroups"]:
-            mesg = ecsub.tools.info_message(TITLE, None, 
-                "boto3.client('logs').delete_log_group(logGroupName = '%s')" % (
-                    group["logGroupName"]
-                )
-            )
-            print (mesg)
-            
-            boto3.client('logs').delete_log_group(
-                logGroupName = group["logGroupName"]
-            )
-            
+            for i in range(3):
+                try:
+                    mesg = ecsub.tools.info_message(TITLE, None, 
+                        "boto3.client('logs').delete_log_group(logGroupName = '%s')" % (
+                            group["logGroupName"]
+                        )
+                    )
+                    print (mesg)
+                    boto3.client('logs').delete_log_group(
+                        logGroupName = group["logGroupName"]
+                    )
+                    break
+                except Exception:
+                    pass
                 
 def remove_log_streams(log_group_name, log_stream_prefix):
     
     groups = _describe_log_groups(log_group_name, None, 50)
-    
+    if groups == None:
+        return
+        
     find = False
     for group in groups["logGroups"]:
         if group["logGroupName"] == log_group_name:
@@ -220,6 +254,9 @@ def remove_log_streams(log_group_name, log_stream_prefix):
     
     while(1):
         streams = _describe_log_streams(log_group_name, log_stream_prefix, None, 50)
+        if streams == None:
+            break
+        
         if len(streams["logStreams"]) == 0:
             mesg = ecsub.tools.info_message(TITLE, None, 
                 "boto3.client('logs').delete_log_group(logGroupName = '%s')" % (
@@ -230,17 +267,22 @@ def remove_log_streams(log_group_name, log_stream_prefix):
             break
 
         for stream in streams["logStreams"]:
-            mesg = ecsub.tools.info_message(TITLE, None, 
-                "boto3.client('logs').delete_log_stream(logGroupName = '%s', logStreamName = '%s')" % (
-                    log_group_name, stream["logStreamName"]
-                )
-            )
-            print (mesg)
-        
-            boto3.client('logs').delete_log_stream(
-                logGroupName = log_group_name,
-                logStreamName = stream["logStreamName"]
-            )
+            for i in range(3):
+                try:
+                    mesg = ecsub.tools.info_message(TITLE, None, 
+                        "boto3.client('logs').delete_log_stream(logGroupName = '%s', logStreamName = '%s')" % (
+                            log_group_name, stream["logStreamName"]
+                        )
+                    )
+                    print (mesg)
+            
+                    boto3.client('logs').delete_log_stream(
+                        logGroupName = log_group_name,
+                        logStreamName = stream["logStreamName"]
+                    )
+                    break
+                except Exception:
+                    pass
             
 def main(params):
     
