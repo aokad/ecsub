@@ -10,6 +10,7 @@ Created on Wed Mar 14 11:53:04 2018
 import sys
 import argparse
 import ecsub.submit as submit
+import ecsub.batch as batch
 import ecsub.delete as delete
 import ecsub.report as report
 import ecsub.log as log
@@ -61,6 +62,36 @@ def main():
     # submit away
     away_parser = _create_submit_parser(subparsers, "away", "submit job, mode fly away")
     away_parser.set_defaults(func = submit.entry_point_flyaway)
+    
+    ##########
+    # batch
+    default = batch.Argments()
+    batch_parser = subparsers.add_parser("batch", help = "Run with AWS Batch")
+    batch_parser.add_argument("--script", metavar = "path/to/script.sh", help = "run script", type = str, required=True)
+    batch_parser.add_argument("--tasks", metavar = "path/to/tasks.tsv", help = "parameters", type = str, required=True)
+    batch_parser.add_argument("--task_name", metavar = "task-name", help = "AWS resources name", type = str, default = default.task_name)
+    batch_parser.add_argument("--wdir", metavar = "path/to/dir", help = "output temporary data", type = str, default = default.wdir)
+    batch_parser.add_argument("--image", metavar = "docker/image:tag", help = "docker image", type = str, default = default.image)
+    batch_parser.add_argument("--shell", metavar = "path/to/bash", help = "path to bash or ash in docker-container", type = str, default = default.shell)
+    batch_parser.add_argument("--setup_container_cmd", metavar = '"pip install awscli"', help = "awscli install command", type = str, default = default.setup_container_cmd)
+    batch_parser.add_argument("--s3_bucket", metavar = "s3://output/bucket", help = "AWS your S3 bucket", type = str, required=True)
+    batch_parser.add_argument("--instance_types", metavar = "c4.large,m5large", help = "AWS instance types, split with ','. [Attention] Do not use 't' family", type = str, default = default.instance_types)
+    batch_parser.add_argument("--vcpu", metavar = 2, help = "The number of vCPUs reserved for the container.", type = int, default = default.vcpu)
+    batch_parser.add_argument("--memory", metavar = 8, help = "The number of memory reserved for the container.", type = int, default = default.memory)
+    batch_parser.add_argument("--disk_size", metavar = 22, help = "AWS disk size (GiB)", type = int, default = default.disk_size)
+    batch_parser.add_argument("--processes", metavar = 20, help = "maximum multi processes", type = int, default = default.processes)
+    batch_parser.add_argument("--security_groups", metavar = "sg-ab123456", help = "AWS your security_group_id, split with ','", type = str, default =  default.security_groups)
+    batch_parser.add_argument("--key_name", metavar = "key-123ab", help = "AWS your key pair name", type = str, default = default.key_name)
+    batch_parser.add_argument("--subnet_ids", metavar = "subnet-123456ab", help = "AWS subnet_id, split with ','", type = str, default = default.subnet_ids)
+    batch_parser.add_argument("--use_amazon_ecr", help = "Use Amazon ECR", action = 'store_true')
+    batch_parser.add_argument("--dind", help = "Docker in Docker?", action = 'store_true')
+    batch_parser.add_argument("--spot", help = "Use SPOT instance", action = 'store_true')
+    batch_parser.add_argument("--gpu", help = "Use GPU instance", action = 'store_true')
+    batch_parser.add_argument("--request_payer_bucket", metavar = "bucket-name", help = "Aware that you will be charged for downloading objects in requester pays buckets. Split with ',' ", type = str, default = default.request_payer_bucket)
+    batch_parser.add_argument("--ignore_location", help = "Ignore differences in location", action = 'store_true')
+    batch_parser.add_argument("--not_verify_bucket", help = "Do not verify input pathes", action = 'store_true')
+    batch_parser.add_argument("--wait", help = "Wait for completion", action = 'store_true')
+    batch_parser.set_defaults(func = batch.entry_point)
     
     ##########
     # report 

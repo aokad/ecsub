@@ -778,7 +778,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                     for key1 in obj["terms"]["OnDemand"].keys():
                         for key2 in obj["terms"]["OnDemand"][key1]["priceDimensions"].keys():
                             values.append(obj["terms"]["OnDemand"][key1]["priceDimensions"][key2]["pricePerUnit"]["USD"])
-            except Exception as e:
+            except Exception:
                 return 0
             
             values.sort()

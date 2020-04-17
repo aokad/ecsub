@@ -5,7 +5,7 @@ Created on Tue Mar 20 12:54:32 2018
 @author: Okada
 """
 
-def get_ami_id():
+def get_ami_id(gpu = False):
     import boto3
     data=boto3.client("ssm").get_parameters(Names=["/aws/service/ecs/optimized-ami/amazon-linux/recommended/image_id"])
     return data['Parameters'][0]['Value']
