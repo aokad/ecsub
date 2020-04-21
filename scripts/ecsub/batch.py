@@ -170,8 +170,9 @@ def check_bucket_location(cluster_name, task_params, work_bucket):
                 bucket = task[i].replace("s3://", "").split("/")[0]
                 buckets_raw.append(bucket)
                 
-        buckets = sorted(list(set(buckets_raw + work_bucket)))
-        buckets.remove("")
+        buckets = sorted(list(set(buckets_raw + [work_bucket.replace("s3://", "").split("/")[0]])))
+        if "" in buckets:
+            buckets.remove("")
         return buckets
 
     buckets = tasks_to_buckets(task_params, work_bucket)
@@ -181,11 +182,12 @@ def check_bucket_location(cluster_name, task_params, work_bucket):
         try:
             response = client.get_bucket_location(Bucket=bucket)
         except Exception as e:
+            print (ecsub.tools.error_message (cluster_name, None, "Failure get_bucket_location '%s'" % (bucket)))
             print (ecsub.tools.error_message (cluster_name, None, e))
             return None
         
         if response['LocationConstraint'] == None:
-            print (ecsub.tools.warning_message (cluster_name, None, "Failure get_bucket_location '%s'..." % (bucket)))
+            print (ecsub.tools.warning_message (cluster_name, None, "Failure get_bucket_location '%s'" % (bucket)))
         else:
             regions.append(response['LocationConstraint'])
     
@@ -222,9 +224,8 @@ def check_inputfiles(cluster_name, task_params, payer_buckets):
                     })
         return pathes
     
-    def __check_file(ctx, path):
+    def __check_file(ctx, thread_name, path):
         exit_code = 1
-        
         try:
             if path["request_payer"]:
                 response = boto3.client("s3").list_objects_v2(
@@ -239,26 +240,24 @@ def check_inputfiles(cluster_name, task_params, payer_buckets):
                     Prefix=path["key"],
                     MaxKeys=10,
                 )
-                
             if path["recursive"]:
-                if response['Contents']['KeyCout'] > 0:
+                if len(response['Contents']) > 0:
                     exit_code = 0
             else:
                 for c in response['Contents']:
-                    if c['Prefix'] == path["key"]:
+                    if c['Key'] == path["key"]:
                         exit_code = 0
             
             if exit_code == 1:
-                print(ecsub.tools.error_message (cluster_name, None, "s3-path '%s' is invalid." % (path)))
+                print(ecsub.tools.error_message (cluster_name, None, "s3 path s3://%s/%s is invalid." % (path["bucket"], path["key"])))
             else:
-                print(ecsub.tools.info_message (cluster_name, None, "check s3-path '%s'...ok" % (path)))
-                
+                print(ecsub.tools.info_message (cluster_name, None, "check s3 path s3://%s/%s ...ok" % (path["bucket"], path["key"])))
+        
         except Exception as e:
-            print(e)
-            print(ecsub.tools.error_message (cluster_name, None, "s3-path '%s' is invalid." % (path)))
-            
+            print(ecsub.tools.error_message (cluster_name, None, "s3 path s3://%s/%s is invalid." % (path["bucket"], path["key"])))
+            print(ecsub.tools.error_message (cluster_name, None, e))
+        
         ctx[thread_name] = exit_code
-
     
     pathes = __tasks_to_pathes(cluster_name, task_params, payer_buckets)
     if len(pathes) == 0:
@@ -269,27 +268,27 @@ def check_inputfiles(cluster_name, task_params, payer_buckets):
     # run thread
     thread_list = []
     ctx = {}
+    job_max = 10
     
     try:
-        
         while len(thread_list) < len(pathes):
             alives = 0
             for th in thread_list:
                 if th.is_alive():
                    alives += 1
                     
-            jobs = 10 - alives
+            jobs = job_max - alives
             submitted = len(thread_list)
             for i in range(jobs):
                 no = i + submitted
                 if no >= len(pathes):
                     break
-
+    
                 thread_name = "thread_%03d" % (no)
                 th = threading.Thread(
                     target = __check_file, 
                     name = thread_name, 
-                    args = ((ctx, pathes[no]))
+                    args = ((ctx, thread_name, pathes[no]))
                 )
                 th.daemon == True
                 th.start()
@@ -300,17 +299,18 @@ def check_inputfiles(cluster_name, task_params, payer_buckets):
         for th in thread_list:
             th.join()
             exitcodes.append(ctx[th.getName()])
-
+    
         # SUCCESS?
         if [0] == list(set(exitcodes)):
-            print ("Success")
+            print(ecsub.tools.info_message (cluster_name, None, "success s3 path check"))
             return True
-        
+        else:
+            print(ecsub.tools.error_message (cluster_name, None, "failure s3 path check"))
+            
     except Exception as e:
-        print (e)
-        
+        print(ecsub.tools.error_message (cluster_name, None, e))
     except KeyboardInterrupt:
-        print ("KeyboardInterrupt")
+        print(ecsub.tools.error_message (cluster_name, None, "keyboardInterrupt"))
         
     return False
 
@@ -320,8 +320,14 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
         s3 = boto3.resource('s3')
         bucket = s3_path.replace("s3://", "").split("/")[0]
         key = s3_path.replace("s3://" + bucket + "/", "")
-        s3.Object(bucket, key).upload_file(local_file)
-        
+        try:
+            s3.Object(bucket, key).upload_file(local_file)
+            print(ecsub.tools.info_message (cluster_name, None, "upload %s ---> s3://%s/%s" % (local_file, bucket, key)))
+            return True
+        except Exception as e:
+            print(ecsub.tools.error_message (cluster_name, None, e))
+        return False
+    
     runsh = local_root + "/run.sh"
     s3_runsh = s3_root + "/run.sh"
     write_runsh(task_params, runsh, shell, ecsub.tools.is_request_payer_bucket(s3_root, request_payer_bucket))
@@ -387,25 +393,28 @@ def terminate_thread(thread):
 def main(params):
 
     try:
-        # set stack_name
-        params["stack_name"] = params["task_name"]
-        if params["stack_name"] == "":
+        # set job_name
+        if params["job_name"] == "":
             now = datetime.datetime.now()
-            basename = os.path.splitext(os.path.basename(params["tasks"]))[0].replace(".", "_")
+            basename = os.path.splitext(os.path.basename(params["tasks"]))[0].replace(".", "-").replace("_", "-")
             for t in basename:
-                if params["stack_name"] == "" and not t.isalpha():
+                if params["job_name"] == "" and not t.isalpha():
                     continue
-                params["stack_name"] += t
-                    
-            params["stack_name"] += "-" + now.strftime("%Y%m%d-%H%M%S")
-                
+                params["job_name"] += t
+                if (len(params["job_name"])) == 112:
+                    break
+            params["job_name"] += "-" + now.strftime("%Y%m%d-%H%M%S")
+        
+        if params["log_group_name"] == "":
+            params["log_group_name"] = params["job_name"]
+            
         # instance_types
-        instance_types = params["aws_ec2_instance_types"].replace(" ", "")
+        instance_types = params["instance_types"].replace(" ", "")
         for itype in instance_types.split(","):
             if itype.startswith("t"):
-                print (ecsub.tools.error_message (params["stack_name"], None, "One of --aws-ec2-instance-type option and --aws-ec2-instance-type-list option is required."))
+                print (ecsub.tools.error_message (params["job_name"], None, "Aws Batch is not support t2 or t3 family."))
                 return 1
-        params["aws_ec2_instance_types"] = instance_types
+        params["instance_types"] = instance_types
         
         # request_payer_bucket
         request_payer_bucket = params["request_payer_bucket"].replace(" ", "")
@@ -413,23 +422,21 @@ def main(params):
         params["request_payer_bucket"].remove("")
             
         # read tasks file
-        task_params = read_tasksfile(params["tasks"], params["stack_name"])
+        task_params = read_tasksfile(params["tasks"], params["job_name"])
         if task_params == None:
-            #print (ecsub.tools.error_message (params["stack_name"], None, "task file is invalid."))
+            #print (ecsub.tools.error_message (params["job_name"], None, "task file is invalid."))
             return 1
         
         if task_params["tasks"] == []:
-            print (ecsub.tools.info_message (params["stack_name"], None, "Task file is empty."))
+            print (ecsub.tools.info_message (params["job_name"], None, "Task file is empty."))
             return 0
         
-        subdir = params["stack_name"]
-        
-        params["wdir"] = params["wdir"].rstrip("/") + "/" + subdir
-        params["aws_s3_bucket"] = params["aws_s3_bucket"].rstrip("/") + "/" + subdir
+        params["wdir"] = params["wdir"].rstrip("/") + "/" + params["job_name"]
+        params["s3_bucket"] = params["s3_bucket"].rstrip("/") + "/" + params["job_name"]
         
         if os.path.exists (params["wdir"]):
             shutil.rmtree(params["wdir"])
-            print (ecsub.tools.info_message (params["stack_name"], None, "'%s' existing directory was deleted." % (params["wdir"])))
+            print (ecsub.tools.info_message (params["job_name"], None, "'%s' existing directory was deleted." % (params["wdir"])))
             
         os.makedirs(params["wdir"])
         os.makedirs(params["wdir"] + "/log")
@@ -438,9 +445,17 @@ def main(params):
 
         # disk-size
         if params["disk_size"] < 1:
-            print (ecsub.tools.error_message (params["stack_name"], None, "disk-size %d is smaller than expected size 1GB." % (params["disk_size"])))
+            print (ecsub.tools.error_message (params["job_name"], None, "disk-size %d is smaller than expected size 1GiB." % (params["disk_size"])))
             return 1
             
+        if params["vcpu"] < 2:
+            print (ecsub.tools.error_message (params["job_name"], None, "vcpu %d is smaller than expected size 2." % (params["vcpu"])))
+            return 1
+        
+        if params["memory"] < 1:
+            print (ecsub.tools.error_message (params["job_name"], None, "memory %d is smaller than expected size 1GiB." % (params["memory"])))
+            return 1    
+        
         aws_instance = ecsub.aws_batch.Aws_ecsub_control(params, len(task_params["tasks"]))
         
         # check task-param
@@ -449,32 +464,32 @@ def main(params):
 
         # check s3-files path
         if params["not_verify_bucket"] == False:
-            regions = check_bucket_location(params["stack_name"], task_params, params["aws_s3_bucket"])
+            regions = check_bucket_location(params["job_name"], task_params, params["s3_bucket"])
             if regions == None:
                 return 1
             if len(regions) > 1:
                 if params["ignore_location"]:
-                    print (ecsub.tools.warning_message (params["stack_name"], None, "your task uses multipule regions '%s'." % (",".join(regions))))
+                    print (ecsub.tools.warning_message (params["job_name"], None, "your task uses multipule regions '%s'." % (",".join(regions))))
                 else:
-                    print (ecsub.tools.error_message (params["stack_name"], None, "your task uses multipule regions '%s'." % (",".join(regions))))
+                    print (ecsub.tools.error_message (params["job_name"], None, "your task uses multipule regions '%s'." % (",".join(regions))))
                     return 1
                 
-            if not check_inputfiles(task_params, params["stack_name"], params["request_payer_bucket"], params["aws_s3_bucket"]):
+            if not check_inputfiles(params["job_name"], task_params, params["request_payer_bucket"]):
                 return 1
         
         # write task-scripts, and upload to S3
         local_script_dir = params["wdir"] + "/script"
-        s3_script_dir = params["aws_s3_bucket"].rstrip("/") + "/script"
+        s3_script_dir = params["s3_bucket"].rstrip("/") + "/script"
         if not upload_scripts(task_params, 
                        aws_instance, 
                        local_script_dir, 
                        s3_script_dir,
                        params["script"],
-                       params["stack_name"],
+                       params["job_name"],
                        params["shell"],
                        params["request_payer_bucket"],
                        params["not_verify_bucket"]):
-            print (ecsub.tools.error_message (params["stack_name"], None, "failure upload files to s3 bucket: %s." % (params["aws_s3_bucket"])))
+            print (ecsub.tools.error_message (params["job_name"], None, "failure upload files to s3 bucket: %s." % (params["s3_bucket"])))
             return 1
         
     except KeyboardInterrupt:
@@ -525,7 +540,7 @@ def main(params):
             th.join()
             exitcodes.append(ctx[th.getName()])
         
-        if params["wait"] == False:
+        if params["wait"] == True:
             aws_instance.clean_up()
             
         # SUCCESS?
@@ -535,18 +550,18 @@ def main(params):
         
     except Exception as e:
         print (e)
-        print (ecsub.tools.important_message (params["stack_name"], None, "Wait until clear up the resources."))
+        print (ecsub.tools.important_message (params["job_name"], None, "Wait until clear up the resources."))
         for th in thread_list:
             terminate_thread(th)
-        print (ecsub.tools.important_message (params["stack_name"], None, "Wait until clear up the resources."))
+        print (ecsub.tools.important_message (params["job_name"], None, "Wait until clear up the resources."))
         aws_instance.clean_up()
         
     except KeyboardInterrupt:
         print ("KeyboardInterrupt")
-        print (ecsub.tools.important_message (params["stack_name"], None, "Wait until clear up the resources."))
+        print (ecsub.tools.important_message (params["job_name"], None, "Wait until clear up the resources."))
         for th in thread_list:
             terminate_thread(th)
-        print (ecsub.tools.important_message (params["stack_name"], None, "Wait until clear up the resources."))
+        print (ecsub.tools.important_message (params["job_name"], None, "Wait until clear up the resources."))
         aws_instance.clean_up()
     
     print ("ecsub failed.")
@@ -583,12 +598,13 @@ class Argments:
         self.dind = False
         self.script = ""
         self.tasks = ""
-        self.task_name = ""
+        self.job_name = ""
         self.s3_bucket = ""
         self.instance_types = "optimal"
         self.vcpu = 2
-        self.memory = 8
+        self.memory = 1
         self.disk_size = 22
+        self.disk_type = "gp2"
         self.processes = 20
         self.security_groups = ""
         self.key_name = ""
@@ -602,11 +618,11 @@ class Argments:
         # The followings are not optional
         self.root_disk_size = 22
         self.setx = "set -x"
-        self.aws_account_id = ""
-        self.aws_region = ""
+        self.account_id = ""
+        self.region = ""
         
         # remove ?
-        self.aws_log_group_name = ""        
+        self.log_group_name = ""        
         
         
 if __name__ == "__main__":

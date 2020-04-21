@@ -29,34 +29,48 @@ class Aws_ecsub_control:
     def __init__(self, params, task_num):
         
         self.wdir = params["wdir"].rstrip("/")
-
-        self.account_id = params["account_id"]
-        if self.account_id == "":
-            self.account_id = self._get_aws_account_id()
-            
-        self.region = params["region"]
-        if self.region == "":
-            self.region = self._get_region()
-    
         self.job_name = params["job_name"]
         self.job_queue_id = ""
         self.job_definition_id = ""
+        self.stack_id = ""
+        self.cluster_arn = ""
+        
+        # Flags
+        self.wait = params["wait"]
+        self.spot = params["spot"]
+        self.gpu = params["gpu"]
+        self.dind = params["dind"]
+        
+        # aws account
+        self.account_id = params["account_id"]
+        if self.account_id == "":
+            self.account_id = self._get_aws_account_id()
+        
+        # default region
+        self.region = params["region"]
+        if self.region == "":
+            self.region = self._get_region()
     
         # compute env
         self.key_auto = ""
         self.key_name = params["key_name"]
         
         self.security_groups = params["security_groups"].split(",")
+        if "" in self.security_groups:
+            self.security_groups.remove("")
         self.subnet_ids = params["subnet_ids"].split(",")
-        
+        if "" in self.subnet_ids:
+            self.subnet_ids.remove("")
+            
         self.ami_id = ecsub.aws_config.get_ami_id(self.gpu)
         
-        self.vcpu_default = params["vcpu"]
-        self.memory_default = params["memory"]
+        self.vcpu = params["vcpu"]
+        self.memory = params["memory"] * 1000
         self.disk_size = params["disk_size"]
         self.root_disk_size = params["root_disk_size"]
         self.disk_type = params["disk_type"]
         self.root_disk_type = params["root_disk_type"]
+        self.instance_types = params["instance_types"]
         
         # container image        
         self.image = params["image"]
@@ -89,12 +103,6 @@ class Aws_ecsub_control:
         
         self.prices = {"ebs": {}, "ec2": {}, "spot": {}}
     
-        # Flags
-        self.wait = params["wait"]
-        self.spot = params["spot"]
-        self.gpu = params["gpu"]
-        self.dind = params["dind"]
-        
     def check_awsconfigure(self):
         if ecsub.aws_config.region_to_location(self.region) == None:
             print(ecsub.tools.error_message (self.job_name, None, "region '%s' can not be used in ecsub." % (self.region)))
@@ -317,15 +325,12 @@ Content-Type: text/cloud-boothook; charset="us-ascii"
 cloud-init-per once yum_update yum update -y
 cloud-init-per once install_tr yum install -y tr
 cloud-init-per once install_td yum install -y td
-cloud-init-per once install_python27_pip yum install -y python27-pip
+cloud-init-per once install_python37_pip yum install -y python37-pip
 cloud-init-per once install_awscli pip install awscli
-
-cloud-init-per once ecs_option echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
 
 cat << EOF > /root/metricscript.sh
 AWSREGION={region}
 AWSINSTANCEID=\$(curl -ss http://169.254.169.254/latest/meta-data/instance-id)
-ECS_CLUSTER_NAME=\$(cat /etc/ecs/ecs.config | grep ^ECS_CLUSTER | cut -d "/" -f 2)
 
 disk_util=\$(df /external | awk '/external/ {{print \$5}}' | awk -F% '{{print \$1}}')
 aws cloudwatch put-metric-data --value \$disk_util --namespace ECSUB --unit Percent --metric-name DataStorageUtilization --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
@@ -361,7 +366,7 @@ echo "aws configure set aws_access_key_id "\$(aws configure get aws_access_key_i
 echo "aws configure set aws_secret_access_key "\$(aws configure get aws_secret_access_key) >> /external/aws_confgure.sh
 echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
 --==BOUNDARY==--
-""".format(cluster_arn = self.cluster_arn, region = self.region)
+""".format(region = self.region)
     
     def set_ondemand_price (self, instance_type):
 
@@ -395,7 +400,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             return True
         
         od_price = get_ondemand_price(self.region, instance_type)
-        self.prices["instance_types"][instance_type] = {"ec2": od_price}
+        self.prices["ec2"][instance_type] = od_price
         
         if od_price == 0:
             print(ecsub.tools.error_message (self.job_name, None, "Failure get on-demand instance price, instance-type %s." % (instance_type)))
@@ -418,6 +423,8 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                 StartTime = start_dt,
                 EndTime = now,
             )
+            log_file = self._log_path("describe_spot_price_history")
+            json_dump(response, log_file)
             
             spot_price = 0
             last_date = None
@@ -430,13 +437,13 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         if instance_type in self.prices["spot"] and az in self.prices["spot"]:
             return True
         
-        spot_price = get_spot_price(self.region, instance_type)
+        spot_price = get_spot_price(instance_type, az)
         if not instance_type in self.prices["spot"]:
             self.prices["spot"][instance_type] = {}
         self.prices["spot"][instance_type][az] = spot_price
         
         if spot_price == 0:
-            print(ecsub.tools.error_message (self.job_name, None, "Failure get spot instance price, instance-type %s." % (instance_type)))
+            print(ecsub.tools.error_message (self.job_name, None, "Failure get spot instance price, instance-type %s, availability-zone: %s" % (instance_type, az)))
             return False
         print(ecsub.tools.info_message (self.job_name, None, "Spot Price: $%.3f, Availality Zone: %s" % (spot_price, az)))
         return True    
@@ -496,9 +503,11 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
  
     def save_summary(self, no, job):
         def _hour_delta(start_t, end_t):
+            if type(start_t) == int:
+                return (end_t - start_t)/3600.0
             return (end_t - start_t).total_seconds()/3600.0
 
-        def _describe_instance (self, instance_id):
+        def _describe_instance (instance_id):
             response = boto3.client('ec2').describe_instances(
                 InstanceIds = [instance_id]
             )
@@ -506,51 +515,57 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             json_dump(response, log_file)
             return response["Reservations"][0]["Instances"][0]
     
-        def _describe_container_instance (self, container_instance_id):
+        def _describe_container_instance (container_instance_id):
+            def _list_clusters(cluster_prefix, next_token = None):
+                if next_token == None:
+                    response = boto3.client('ecs').list_clusters()
+                else:
+                    response = boto3.client('ecs').list_clusters(nextToken=next_token)
+                for cluster in response['clusterArns']:
+                    if cluster.split("/")[1].startswith(cluster_prefix):
+                        return (cluster, None)
+                if 'nextToken' in response:
+                    return (None, response['nextToken'])
+                return (None, None)
+            
+            if self.cluster_arn == "":
+                next_token = None
+                while True:
+                    (cluster, next_token) = _list_clusters(self.job_name, next_token)
+                    if cluster != None:
+                        self.cluster_arn = cluster
+                        break
+                    if next_token == None:
+                        return None
+                    
             response = boto3.client('ecs').describe_container_instances(
+                cluster = self.cluster_arn,
                 containerInstances = [container_instance_id]
             )
             log_file = self._log_path("describe_container_instances.%03d" % (no))
             json_dump(response, log_file)
             return response["containerInstances"][0]
-        
-       
-        def _describe_spot_instances(request_id = None, instance_id = None):
-            response = None
-            if request_id != None:
-                response = boto3.client("ec2").describe_spot_instance_requests(
-                    SpotInstanceRequestIds=[request_id]
-                )
-            elif instance_id != None:
-                response = boto3.client("ec2").describe_spot_instance_requests(
-                    Filters = [{"Name":"instance-id", "Values": [instance_id]}]
-                )
-            else:
-                return None
-            
-            if not 'SpotInstanceRequests' in response:
-                return None
-    
-            import copy
-            response_cp = copy.deepcopy(response)
-            r0 = response['SpotInstanceRequests'][0]
-            r0_cp = response_cp['SpotInstanceRequests'][0]
-            r0_cp['CreateTime'] = ecsub.tools.datetime_to_isoformat(r0['CreateTime'])
-            r0_cp['Status']['UpdateTime'] = ecsub.tools.datetime_to_isoformat(r0['Status']['UpdateTime']) 
-            r0_cp['ValidUntil'] = ecsub.tools.datetime_to_isoformat(r0['ValidUntil']) 
-            
-            log_file = self._log_path("describe_container_instances.%03d" % (no))
-            json_dump(response_cp, log_file)
-            return response['SpotInstanceRequests'][0]
 
-        wtime = _hour_delta(job["StartedAt"], job["StoppedAt"])
+        def _describe_volumes(volume_ids):
+            response = boto3.client("ec2").describe_volumes(
+                VolumeIds=volume_ids,
+            )
+            log_file = self._log_path("describe_volumes.%03d" % (no))
+            json_dump(response, log_file)
+            return response["Volumes"]
+        
+        wtime = _hour_delta(job["startedAt"], job["stoppedAt"])
         messages = []
         
         # instance prices
         cont_info = _describe_container_instance(job["container"]["containerInstanceArn"])
+        if cont_info == None:
+            print(ecsub.tools.error_message (self.job_name, no, "failure create summary"))
+            return
+        
         inst_info = _describe_instance(cont_info["ec2InstanceId"])
         itype = inst_info['InstanceType']
-        az = inst_info['Placement'['AvailabilityZone']]
+        az = inst_info['Placement']['AvailabilityZone']
         
         self.set_ondemand_price (itype)
         
@@ -565,20 +580,19 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             messages.append(template_ec2 % (instance_price, itype, self.prices["ec2"][itype], wtime))
         
         # disk prices
+        volume_ids = []
+        for mapping in inst_info["BlockDeviceMappings"]:
+            volume_ids.append(mapping["Ebs"]["VolumeId"])
+            
         disk_price = 0.0
-        default_type = "gp2"
-        disk_price += self.disk_size * self.prices["ebs"][self.disk_type] * wtime / 24 / 30
-        root_price = self.root_disk_size * self.prices["ebs"][self.root_disk_type] * wtime / 24 / 30
-        root2_price = 8 * self.prices["ebs"][default_type] * wtime / 24 / 30
+        template_ebs = " + volume %s (%s): $%.3f, attached %d (GiB), $%.3f per GB-month, running-time %.3f Hour"
+        if len(volume_ids) > 0:
+            vol_info = _describe_volumes(volume_ids)
+            for v in vol_info:
+                vprice = v["Size"] * self.prices["ebs"][v['VolumeType']] * wtime / 24 / 30
+                disk_price += vprice
+                messages.append(template_ebs % (v["Attachments"][0]["Device"], v['VolumeType'], vprice, v["Size"], self.prices["ebs"][v['VolumeType']], wtime))
         
-        template_ebs = " + volume [%s]: $%.3f, attached %d (GiB), $%.3f per GB-month, running-time %.3f Hour"
-        messages.append(template_ebs % (default_type, root2_price, 8, self.prices["ebs"][default_type], wtime))
-        messages.append(template_ebs % (self.root_disk_type, root_price, self.root_disk_size, self.prices["ebs"][self.root_disk_type], wtime))
-        messages.append(template_ebs % (self.disk_type, disk_price, self.disk_size, self.prices["ebs"][self.disk_type], wtime))
-        
-        disk_price += root_price
-        disk_price += root2_price
-    
         # total price        
         total_price = disk_price + instance_price
         
@@ -595,20 +609,20 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         
         summary["no"] = no
         summary["job_id"] = job["jobId"]
-        summary["crated_at"] = job["CreatedAt"]
-        summary["started_at"] = job["StartedAt"]
-        summary["stopped_at"] = job["StoppedAt"]
-        summary["work_hours"] = wtime
+        summary["crated_at"] = job["createdAt"]
+        summary["started_at"] = job["startedAt"]
+        summary["stopped_at"] = job["stoppedAt"]
+        summary["work_hours"] = float("%.5f" % (wtime))
         
         summary["status"] = job["status"]
-        summary["exit_code"] = job["exitCode"]
-        summary["log_stream_name"] = job["LogStreamName"]
+        summary["exit_code"] = job["container"]["exitCode"]
+        summary["log_stream_name"] = job["container"]["logStreamName"]
         
         summary["instance_type"] = itype
         summary["availability_zone"] = az
-        summary["instance_price"] = "%.5f" % (instance_price)
-        summary["disk_price"] = "%.5f" % (disk_price)
-        summary["total_price"] = "%.5f" % (total_price)
+        summary["instance_price"] = float("%.5f" % (instance_price))
+        summary["disk_price"] = float("%.5f" % (disk_price))
+        summary["total_price"] = float("%.5f" % (total_price))
                
         log_file = self._log_path("summary.%03d" % (no))
         json_dump(summary, log_file)
@@ -641,14 +655,14 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         if self.spot:
             cr_type = "SPOT"
             
-        template = cf_template.template
+        template = ecsub.cf_template.template
         
         tmp_params = template["Parameters"]
         tmp_params["JobName"]["Default"] = self.job_name
         tmp_params["InstanceTypes"]["Default"]  = self.instance_types
-        tmp_params["vCPUs"]["Default"]  = self.vcpu_default
-        tmp_params["Memory"]["Default"] = self.memory_default
-        tmp_params["Disk"]["Default"] = self.disk_size
+        tmp_params["vCPUs"]["Default"]  = self.vcpu
+        tmp_params["Memory"]["Default"] = self.memory
+        tmp_params["VolumeSize"]["Default"] = self.disk_size
         tmp_params["ContainerImage"]["Default"] = IMAGE_ARN
         tmp_params["AutoKey"]["Default"] = self.key_auto
         
@@ -662,7 +676,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         tmp_env["ComputeResources"]["Ec2KeyPair"] = self.key_name
         tmp_env["ComputeResources"]["ImageId"] = self.ami_id
         tmp_env["ComputeResources"]["InstanceRole"] = "ecsInstanceRole"
-        tmp_env["ComputeResources"]["MaxvCpus"] = self.vcpu_default * self.task_num
+        tmp_env["ComputeResources"]["MaxvCpus"] = self.vcpu * self.task_num
         tmp_env["ComputeResources"]["SecurityGroupIds"] = self.security_groups
         tmp_env["ComputeResources"]["Subnets"] = self.subnet_ids
         tmp_env["ComputeResources"]["SpotIamFleetRole"] = "arn:aws:iam::%s:role/AmazonEC2SpotFleetRole" % (self.account_id)
@@ -695,32 +709,38 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         
         #create
         client = boto3.client('cloudformation')
-        
+        log_file = self._log_path("create_stack")
+        json_dump(template, log_file)
+            
         try:
-            stack_id = client.create_stack(
+            print(ecsub.tools.info_message (self.job_name, None, "boto3.client('cloudformation').create_stack()"))
+            response = client.create_stack(
                 StackName=self.job_name,
                 TemplateBody=json.dumps(template)
-            )['StackId']
+            )
+            self.stack_id = response['StackId']
+            print(ecsub.tools.info_message (self.job_name, None, "boto3.client('cloudformation').get_waiter('stack_create_complete').wait()"))
             client.get_waiter('stack_create_complete').wait(
-                StackName = stack_id,
+                StackName = self.stack_id,
                 WaiterConfig={'Delay': 30, 'MaxAttempts': 5}
             )
-            
             log_file = self._log_path("describe_stacks")
             json_dump(client.describe_stacks(StackName=self.job_name), log_file)
             
-        except Exception:
+        except Exception as e:
             print(ecsub.tools.error_message (self.job_name, None, "failure to create AWS Batch environment."))
-            stack_events = client.describe_stack_events(
-                StackName=self.job_name
-            )
-            for event in stack_events["StackEvents"]:
-                if event['ResourceStatus'] == 'CREATE_FAILED':
-                    print(ecsub.tools.error_message (self.job_name, None, 
-                        "ResourceType: %s, ResourceStatusReason: %s" % (event['ResourceType'], event['ResourceStatusReason'])
-                    ))
-            log_file = self._log_path("describe_stack_events")
-            json_dump(stack_events, log_file)
+            print(ecsub.tools.error_message (self.job_name, None, e))
+            if self.stack_id != "":
+                stack_events = client.describe_stack_events(
+                    StackName=self.stack_id
+                )
+                for event in stack_events["StackEvents"]:
+                    if event['ResourceStatus'] == 'CREATE_FAILED':
+                        print(ecsub.tools.error_message (self.job_name, None, 
+                            "ResourceType: %s, ResourceStatusReason: %s" % (event['ResourceType'], event['ResourceStatusReason'])
+                        ))
+                log_file = self._log_path("describe_stack_events")
+                json_dump(stack_events, log_file)
             return False
         
         self.job_queue_id = client.describe_stack_resource(
@@ -759,61 +779,85 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                 "name": op["name"],
                 "value": op["value"],
             })
-            
+        
+        print(ecsub.tools.info_message (self.job_name, no, "boto3.client('batch').submit_job()"))
         response = boto3.client('batch').submit_job(
-            jobName = self.job_name,
-            jobQueue = self.job_queue,
-            jobDefinition = self.job_definition,
+            jobName = "%s_%d" % (self.job_name, no),
+            jobQueue = self.job_queue_id,
+            jobDefinition = self.job_definition_id,
             containerOverrides={
-                "name": "%s_%d" % (self.job_name, no),
                 "environment": environment,
             },
         )
-        job_id = response['jobId']       
+        log_file = self._log_path("submit_job.%03d" % (no))
+        json_dump(response, log_file)
+        
+        job_id = response['jobId']
         response = boto3.client('batch').describe_jobs(jobs=[job_id])
         log_file = self._log_path("describe_jobs.%03d" % (no))
+        json_dump(response, log_file)
         
-        if self.wait == False:
-            json_dump(response, log_file)
-            return 0
-        
+        print_log = True
         while True:
             if len(response["jobs"]) == 0:
                 return 1
+            
+            if print_log:
+                try:
+                    stream = response["jobs"][0]["container"]["logStreamName"]
+                
+                    log_html = "https://{region}.console.aws.amazon.com/cloudwatch/home?region={region}#logEventViewer:group={group};stream={stream}".format(
+                        region = self.region,
+                        group = "/aws/batch/job",
+                        stream = stream
+                    )
+                    print(ecsub.tools.info_message (self.job_name, None, "job status is %s" % (response["jobs"][0]['status'])))
+                    print(ecsub.tools.message (self.job_name, no, [{"text": " For detail, see log-file: "}, {"text": log_html, "color": ecsub.tools.get_title_color(no)}]))
+                    print_log = False
+                    if self.wait == False:
+                        return 0
+                
+                except Exception:
+                    pass
             if response["jobs"][0]['status'] in ['SUCCEEDED', 'FAILED']:
                 break
             
+            #print(ecsub.tools.info_message (self.job_name, no, "waiting for job to finish"))
             time.sleep(10)
             response = boto3.client('batch').describe_jobs(jobs=[job_id])
-
-        json_dump(response, log_file)
+            json_dump(response, log_file)
+            
+        print (ecsub.tools.info_message (self.job_name, no, "job-stopped with [%s]" % (response["jobs"][0]["status"])))
+        #log_file = self._log_path("describe_jobs.%03d" % (no))
         
         # calc_cost
-        self.save_summary(no, response["Jobs"][0])
+        self.save_summary(no, response["jobs"][0])
 
-        print (ecsub.tools.info_message (self.job_name, no, "job-stopped with [%s]" % (response["Jobs"][0]["status"])))
-        if response["Jobs"][0]["status"] == "SUCCEEDED":
+        if response["jobs"][0]["status"] == "SUCCEEDED":
             return 0
         else:
-            print (ecsub.tools.info_message (self.job_name, no, "statusReason1: %s" % (response["Jobs"][0]["statusReason"])))
-            print (ecsub.tools.info_message (self.job_name, no, "statusReason2: %s" % (response["Jobs"][0]["attempts"][0]["container"]["statusReason"])))
+            print (ecsub.tools.info_message (self.job_name, no, "statusReason1: %s" % (response["jobs"][0]["statusReason"])))
+            print (ecsub.tools.info_message (self.job_name, no, "statusReason2: %s" % (response["jobs"][0]["attempts"][0]["container"]["statusReason"])))
         
         return 1
         
     def clean_up (self):
-        
-        client = boto3.client('cloudformation')
-        client.delete_stack(StackName = self.stack_id)
-        client.get_waiter('stack_delete_complete').wait(
-            StackName = self.stack_id,
-            WaiterConfig = {
-                'Delay': 30,
-                'MaxAttempts': 120
-            }
-        )
+        if self.stack_id != "":
+            client = boto3.client('cloudformation')
+            print(ecsub.tools.info_message (self.job_name, None, "boto3.client('cloudformation').delete_stack()"))
+            client.delete_stack(StackName = self.stack_id)
+            print(ecsub.tools.info_message (self.job_name, None, "boto3.client('cloudformation').get_waiter('stack_delete_complete').wait()"))
+            client.get_waiter('stack_delete_complete').wait(
+                StackName = self.stack_id,
+                WaiterConfig = {
+                    'Delay': 30,
+                    'MaxAttempts': 120
+                }
+            )
         # delete ssh key pair
         if self.key_auto != "":
-            client.delete_key_pair(KeyName=self.key_auto)
+            print(ecsub.tools.info_message (self.job_name, None, "boto3.client('ec2').delete_key_pair()"))
+            boto3.client('ec2').delete_key_pair(KeyName=self.key_auto)
     
 def __get_ecsub_key():
     
