@@ -33,7 +33,8 @@ class Aws_ecsub_control:
         self.aws_key_auto = None
         self.aws_key_name = params["aws_key_name"]
         self.aws_security_group_id = params["aws_security_group_id"]
-        
+        self.aws_ecs_instance_role_name = params['aws_ecs_instance_role_name']
+
         self.wdir = params["wdir"].rstrip("/")
         self.cluster_name = params["cluster_name"]
         self.setx = params["setx"]
@@ -360,8 +361,10 @@ class Aws_ecsub_control:
 
     def register_task_definition(self):
 
-        ECSTASKROLE = "arn:aws:iam::{AWS_ACCOUNTID}:role/ecsInstanceRole".format(
-            AWS_ACCOUNTID = self.aws_accountid)
+        ECSTASKROLE = \
+            "arn:aws:iam::{AWS_ACCOUNTID}:role/{AWS_ECS_INSTANCE_ROLE_NAME}"\
+            .format(AWS_ACCOUNTID=self.aws_accountid,
+                    AWS_ECS_INSTANCE_ROLE_NAME=self.aws_ecs_instance_role_name)
 
         IMAGE_ARN = self.image
         if self.use_amazon_ecr:
@@ -618,7 +621,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             + " --security-group-ids {SECURITYGROUPID}" \
             + " --key-name {KEY_NAME}" \
             + " --user-data file://{userdata}" \
-            + " --iam-instance-profile Name=ecsInstanceRole" \
+            + " --iam-instance-profile Name={AWS_ECS_INSTANCE_ROLE_NAME}" \
             + " --instance-type {instance_type}" \
             + " --block-device-mappings file://{json}" \
             + " --count 1 {subnet_id}" \
@@ -631,6 +634,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             KEY_NAME = self.aws_key_name,
             subnet_id = subnet_id,
             instance_type = self.task_param[no]["aws_ec2_instance_type"],
+            AWS_ECS_INSTANCE_ROLE_NAME=self.aws_ecs_instance_role_name,
             json = bd_mappings_file,
             INDEX = no,
             userdata = userdata_file,
@@ -839,7 +843,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             "SecurityGroupIds": [ self.aws_security_group_id ],
             "BlockDeviceMappings": block_device_mappings,
             "IamInstanceProfile": {
-                "Name": "ecsInstanceRole"
+                "Name": self.aws_ecs_instance_role_name
             },
             "ImageId": self.aws_ami_id,
             "InstanceType": self.task_param[no]["aws_ec2_instance_type"],
