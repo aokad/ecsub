@@ -247,8 +247,7 @@ class Aws_ecsub_control:
         #return json.loads(response)["Account"]
         
     def _get_region(self):
-        response = self._subprocess_communicate("aws configure get region")
-        return response.rstrip("\n")
+        return boto3.session.Session().region_name
 
     def _json_load(self, json_file):
         
