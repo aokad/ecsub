@@ -28,7 +28,7 @@ def main():
         submit_parser = subparsers.add_parser(sub_command, help = help_text)
         submit_parser.add_argument("--wdir", metavar = "path/to/dir", help = "output temporary data", type = str, default = default.wdir)
         submit_parser.add_argument("--image", metavar = "docker/image:tag", help = "docker image", type = str, default = default.image)
-        submit_parser.add_argument("--use_amazon_ecr", help = "use_amazon_ecr", action = 'store_true')
+        submit_parser.add_argument("--use-amazon-ecr", help = "use_amazon_ecr", action = 'store_true')
         submit_parser.add_argument("--shell", metavar = "path/to/bash", help = "path to bash or ash in docker-container", type = str, default = default.shell)
         submit_parser.add_argument("--setup-container-cmd", metavar = '"pip install awscli"', help = "awscli install command", type = str, default = default.setup_container_cmd)
         submit_parser.add_argument("--dind", help = "Docker in Docker?", action = 'store_true')
