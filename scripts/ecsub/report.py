@@ -95,7 +95,7 @@ def _load_summary(params, dic_summary, header):
             info["task_endAt"] = data["End"]
             if info["task_endAt"] == None:
                 info["task_endAt"] = ""
-            info["disk_size"] = str(data["Ec2InstanceDiskSize"] + data["Ec2InstanceRootDiskSize"] + 8)
+            info["disk_size"] = str(data["Ec2InstanceDiskSize"])
             if "Price" in data:
                 info["price"] = str(data["Price"])
             

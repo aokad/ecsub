@@ -480,7 +480,7 @@ def _save_summary_file(task_summary, print_cost):
     template_ec2 = " + instance-%d: $%.3f, instance-type %s (%s) $%.3f (if %s: $%.3f), running-time %.3f Hour"
     template_ebs = " + volume-%d: $%.3f, attached %d (GiB), $%.3f per GB-month of General Purpose SSD (gp2), running-time %.3f Hour"
     
-    disk_size = task_summary["Ec2InstanceDiskSize"] + task_summary["Ec2InstanceRootDiskSize"] + 8
+    disk_size = task_summary["Ec2InstanceDiskSize"]
     
     total_cost = 0.0
     items = []
@@ -525,7 +525,6 @@ def submit_task(ctx, thread_name, aws_instance, no, task_params, spot):
         "ClusterName": aws_instance.cluster_name,
         "ClusterArn": aws_instance.cluster_arn,
         "Ec2InstanceDiskSize": aws_instance.disk_size,
-        "Ec2InstanceRootDiskSize": aws_instance.root_disk_size,
         "EbsPrice": aws_instance.ebs_price,
         "End": None,
         "Image": aws_instance.image,
@@ -674,6 +673,11 @@ def main(params):
             print (ecsub.tools.error_message (params["cluster_name"], None, "disk-size %d is smaller than expected size 1GB." % (params["disk_size"])))
             return 1
             
+        # Adding requested disk size to the default EBS size of Amazon Linux 2
+        # AMI to be consistent with the previous versions of ecsub using
+        # Amazon Linux 1
+        params["disk_size"] += 30
+
         aws_instance = ecsub.aws.Aws_ecsub_control(params, len(task_params["tasks"]))
         
         # check task-param
@@ -856,7 +860,6 @@ class Argments:
         self.not_verify_bucket = False
         
         # The followings are not optional
-        self.root_disk_size = 22
         self.setx = "set -x"
         self.flyaway = False
         self.aws_account_id = ""

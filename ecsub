@@ -39,7 +39,12 @@ def main():
         submit_parser.add_argument("--aws-ec2-instance-type", metavar = "t3.micro,t2.micro", help = "AWS instance types, split with ',' ", type = str, default = default.aws_ec2_instance_type)
         submit_parser.add_argument("--aws-ec2-instance-type-list", metavar = "t3.micro,t2.micro", help = "(Deprecated as it is to be decommissioned.) AWS instance types, split with ',' ", type = str, default = default.aws_ec2_instance_type_list)
         submit_parser.add_argument("--aws-ecs-instance-role-name", metavar="ecsInstanceRole", help="AWS ECS instance role name", type=str, default=default.aws_ecs_instance_role_name)
-        submit_parser.add_argument("--disk-size", metavar = 22, help = "AWS disk size (GiB)", type = int, default = default.disk_size)
+        submit_parser.add_argument("--disk-size", metavar='22',
+                                   help="Size of extra disk space in GiB for "
+                                        "container layers and mounted volumes,"
+                                        " excluding 30GiB for OS and docker "
+                                        "runtime",
+                                   type=int, default=default.disk_size)
         submit_parser.add_argument("--processes", metavar = 20, help = "maximum multi processes", type = int, default = default.processes)
         submit_parser.add_argument("--processes-file-check", metavar = 10, help = "maximum multi processes for exists of iput files", type = int, default = default.processes_file_check)
         submit_parser.add_argument("--aws-security-group-id", metavar = "sg-ab123456,sg-ab456789", help = "AWS your security_group_ids, split with ',' ", type = str, default =  default.aws_security_group_id)
