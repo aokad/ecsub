@@ -713,6 +713,16 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
     
     def set_spot_price (self, no):
         
+        availarity_zone = []
+        if  self.aws_subnet_id != "":
+            try:
+                response = boto3.client('ec2').describe_subnets(SubnetIds=[self.aws_subnet_id])
+                for subnet in response['Subnets']:
+                    availarity_zone.append(subnet['AvailabilityZone'])
+            except Exception as e:
+                print (e)
+                return False
+            
         now = datetime.datetime.utcnow()
         start_dt = now - datetime.timedelta(days = 6)
         response = boto3.client('ec2').describe_spot_price_history(
@@ -727,11 +737,13 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         try:
             for his in response["SpotPriceHistory"]:
                 az = his['AvailabilityZone']
+                if availarity_zone != [] and not az in availarity_zone:
+                    continue
                 if not az in spot_prices:
                     spot_prices[az] = []
                 spot_prices[az].append(float(his['SpotPrice']))
         except Exception as e:
-            print (e)                
+            print (e)
             return False
     
         price = {"az": "", "price": -1}
@@ -781,7 +793,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                     for key1 in obj["terms"]["OnDemand"].keys():
                         for key2 in obj["terms"]["OnDemand"][key1]["priceDimensions"].keys():
                             values.append(obj["terms"]["OnDemand"][key1]["priceDimensions"][key2]["pricePerUnit"]["USD"])
-            except Exception as e:
+            except Exception:
                 return 0
             
             values.sort()
@@ -855,7 +867,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         }
                         
         if self.aws_subnet_id != "":
-            specification["subnet_id"] = self.aws_subnet_id
+            specification["SubnetId"] = self.aws_subnet_id
         
         specification_file = self._conf_path("specification_file.%03d.json" % (no))
         json.dump(specification, open(specification_file, "w"), indent=4, separators=(',', ': '))
