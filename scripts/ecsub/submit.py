@@ -160,78 +160,36 @@ decrypt () {
     open(setenv, "w").write(sec_env_text + env_text)
     open(downloader, "w").write(dw_text)
     open(uploader, "w").write(up_text)
-    
-def check_inputfiles_collect(files, dirs, cluster_name):
-    
-    uncheck_dirs = []
-    uncheck_dirs.extend(dirs)
-    for d in dirs:
-        for f in files:
-            if f.startswith(d):
-                uncheck_dirs.remove(d)
-                break
 
-    tree = {}
-    for path in files:
-        bucket = path.split("/")[0]
-        if not bucket in tree:
-            tree[bucket] = {}
-            tree[bucket]["files"] = []
-            tree[bucket]["dirs"] = []
-        tree[bucket]["files"].append(path.replace(bucket + "/", "", 1))
-
-    for path in uncheck_dirs:
-        bucket = path.split("/")[0]
-        if not bucket in tree:
-            tree[bucket] = {}
-            tree[bucket]["files"] = []
-            tree[bucket]["dirs"] = []
-        tree[bucket]["dirs"].append(path.replace(bucket + "/", "", 1))
+def check_bucket_location(cluster_name, task_params, work_bucket):
     
-    s3 = boto3.resource('s3')
-    for key in tree:
-        bucket = s3.Bucket(key)
-        print (ecsub.tools.info_message (cluster_name, None, "checking s3 bucket '%s'..." % (key)))
-        for obj in bucket.objects.all():
-            if obj.key in tree[key]["files"]:
-                tree[key]["files"].remove(obj.key)
-
-            match = [s for s in tree[key]["dirs"] if obj.key.startswith(s)]
-            for d in match:
-                tree[key]["dirs"].remove(d)
-            if len(tree[key]["files"]) == 0 and len(tree[key]["dirs"]) == 0:
-                break
-
-    result = []
-    for key in tree:
-        for typ in tree[key]:
-            for path in tree[key][typ]:
-                result.append("%s/%s" % (key, path))
+    def tasks_to_buckets(task_params, work_bucket):
+        buckets_raw = []
+        for task in task_params["tasks"]:
+            for i in range(len(task)):
+                if task_params["header"][i]["type"] in ["env", "secret-env"]:
+                    continue
+                bucket = task[i].replace("s3://", "").split("/")[0]
+                buckets_raw.append(bucket)
+                
+        buckets = sorted(list(set(buckets_raw + [work_bucket.replace("s3://", "").split("/")[0]])))
+        if "" in buckets:
+            buckets.remove("")
+        return buckets
     
-    return result
-    
-def check_inputfiles_partial(aws_instance, files, dirs):
-        
-    for path in files + dirs:
-        if not aws_instance.check_file(path):
-            return [path]
-
-    return []
-
-def check_bucket_location(cluster_name, pathes):
-    buckets = []
-    for p in pathes:
-        path = p.replace("s3://", "", 1).strip("/").rstrip("/").split("/")[0]
-        if path == "":
-            continue
-        buckets.append(path)
-    
+    buckets = tasks_to_buckets(task_params, work_bucket)
     client = boto3.client("s3")
     regions = []
     for bucket in sorted(list(set(buckets))):
-        response = client.get_bucket_location(Bucket=bucket)
+        try:
+            response = client.get_bucket_location(Bucket=bucket)
+        except Exception as e:
+            print (ecsub.tools.error_message (cluster_name, None, "Failure get_bucket_location '%s'" % (bucket)))
+            print (ecsub.tools.error_message (cluster_name, None, e))
+            return None
+        
         if response['LocationConstraint'] == None:
-            print (ecsub.tools.warning_message (cluster_name, None, "Failure get_bucket_location '%s'..." % (bucket)))
+            print (ecsub.tools.warning_message (cluster_name, None, "Failure get_bucket_location '%s'" % (bucket)))
         else:
             regions.append(response['LocationConstraint'])
     
@@ -241,49 +199,141 @@ def check_bucket_location(cluster_name, pathes):
     
     return regions
 
-def check_inputfiles(aws_instance, task_params, cluster_name, payer_buckets, work_bucket):
+def check_inputfiles(cluster_name, task_params, payer_buckets, job_max = 10):
     
-    files = []
-    dirs = []
-    files_rp = []
-    dirs_rp = []
-    outputs = []
-    for task in task_params["tasks"]:
-        for i in range(len(task)):
-            if task_params["header"][i]["type"] == "output":
-                outputs.append(task[i])
+    def __tasks_to_pathes(cluster_name, task_params, payer_buckets):
+        pathes = []
+        keys = []
+        for task in task_params["tasks"]:
+            for i in range(len(task)):
+                if task_params["header"][i]["type"] != "input":
+                    continue
                 
-            if task_params["header"][i]["type"] != "input":
-                continue
-            
-            path = task[i].replace("s3://", "", 1).strip("/").rstrip("/")
-            if path == "":
-                continue
-            
-            if ecsub.tools.is_request_payer_bucket(task[i], payer_buckets):
-                if task_params["header"][i]["recursive"]:
-                    dirs_rp.append(path)
-                else:
-                    files_rp.append(path)
+                bucket = task[i].replace("s3://", "").split("/")[0]
+                key = task[i].replace("s3://", "").replace(bucket, "")
+                if key.startswith("/"):
+                    key = key[1:]
+                if key == "":
+                    continue
+                
+                if not [bucket, key] in keys:
+                    keys.append([bucket, key])
+                    pathes.append({
+                        "bucket": bucket,
+                        "key": key,
+                        "request_payer": ecsub.tools.is_request_payer_bucket(task[i], payer_buckets),
+                        "recursive": task_params["header"][i]["recursive"]
+                    })
+        return pathes
+    
+    def __check_file(ctx, thread_name, path):
+        exit_code = 1
+        try:
+            if path["request_payer"]:
+                response = boto3.client("s3").list_objects_v2(
+                    Bucket=path["bucket"],
+                    Prefix=path["key"],
+                    MaxKeys=10,
+                    RequestPayer='requester'
+                )
             else:
-                if task_params["header"][i]["recursive"]:
-                    dirs.append(path)
-                else:
-                    files.append(path)
+                response = boto3.client("s3").list_objects_v2(
+                    Bucket=path["bucket"],
+                    Prefix=path["key"],
+                    MaxKeys=10,
+                )
+            if path["recursive"]:
+                if len(response['Contents']) > 0:
+                    exit_code = 0
+            else:
+                for c in response['Contents']:
+                    if c['Key'] == path["key"]:
+                        exit_code = 0
+            
+            if exit_code == 1:
+                print(ecsub.tools.error_message (cluster_name, None, "s3 path s3://%s/%s is invalid." % (path["bucket"], path["key"])))
+            else:
+                print(ecsub.tools.info_message (cluster_name, None, "check s3 path s3://%s/%s ...ok" % (path["bucket"], path["key"])))
+        
+        except Exception as e:
+            print(ecsub.tools.error_message (cluster_name, None, "s3 path s3://%s/%s is invalid." % (path["bucket"], path["key"])))
+            print(ecsub.tools.error_message (cluster_name, None, e))
+        
+        ctx[thread_name] = exit_code
     
-    regions = check_bucket_location(cluster_name, dirs + files + [work_bucket] + outputs)
-          
-    invalid_files = []
-    invalid_files += check_inputfiles_collect(sorted(list(set(files))), sorted(list(set(dirs))), cluster_name)
-    invalid_files += check_inputfiles_partial(aws_instance, sorted(list(set(files_rp))), sorted(list(set(dirs_rp))))
+    pathes = __tasks_to_pathes(cluster_name, task_params, payer_buckets)
+    if len(pathes) == 0:
+        return True
     
-    return (regions, invalid_files)
+    import threading
+    
+    # run thread
+    thread_list = []
+    ctx = {}
+    
+    try:
+        while len(thread_list) < len(pathes):
+            alives = 0
+            for th in thread_list:
+                if th.is_alive():
+                   alives += 1
+                    
+            jobs = job_max - alives
+            submitted = len(thread_list)
+            for i in range(jobs):
+                no = i + submitted
+                if no >= len(pathes):
+                    break
+    
+                thread_name = "thread_%03d" % (no)
+                th = threading.Thread(
+                    target = __check_file, 
+                    name = thread_name, 
+                    args = ((ctx, thread_name, pathes[no]))
+                )
+                th.daemon == True
+                th.start()
+                
+                thread_list.append(th)
+                
+        exitcodes = []
+        for th in thread_list:
+            th.join()
+            exitcodes.append(ctx[th.getName()])
+    
+        # SUCCESS?
+        if [0] == list(set(exitcodes)):
+            print(ecsub.tools.info_message (cluster_name, None, "success s3 path check"))
+            return True
+        else:
+            print(ecsub.tools.error_message (cluster_name, None, "failure s3 path check"))
+            
+    except Exception as e:
+        print(ecsub.tools.error_message (cluster_name, None, e))
+    except KeyboardInterrupt:
+        print(ecsub.tools.error_message (cluster_name, None, "keyboardInterrupt"))
+        
+    return False
 
 def upload_scripts(task_params, aws_instance, local_root, s3_root, script, cluster_name, shell, request_payer_bucket, not_verify_bucket):
 
+    def upload_file (local_file, s3_path):
+        s3 = boto3.resource('s3')
+        bucket = s3_path.replace("s3://", "").split("/")[0]
+        key = s3_path.replace("s3://" + bucket + "/", "")
+        try:
+            s3.Object(bucket, key).upload_file(local_file)
+            print(ecsub.tools.info_message (cluster_name, None, "upload %s ---> s3://%s/%s" % (local_file, bucket, key)))
+            return True
+        except Exception as e:
+            print(ecsub.tools.error_message (cluster_name, None, e))
+        return False
+    
     runsh = local_root + "/run.sh"
     s3_runsh = s3_root + "/run.sh"
     write_runsh(task_params, runsh, shell, ecsub.tools.is_request_payer_bucket(s3_root, request_payer_bucket))
+    if not upload_file(runsh, s3_runsh):
+        return False
     
     s3_setenv_list = []
     s3_downloader_list = []
@@ -297,27 +347,22 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
         s3_uploader = s3_root + "/uploader.%d.sh" % (i)
         
         write_s3_scripts(task_params, request_payer_bucket, setenv, downloader, uploader, i)
+        if not upload_file(setenv, s3_setenv):
+            return False
+        if not upload_file(downloader, s3_downloader):
+            return False
+        if not upload_file(uploader, s3_uploader):
+            return False
+        
         s3_setenv_list.append(s3_setenv)
         s3_downloader_list.append(s3_downloader)
         s3_uploader_list.append(s3_uploader)
         
-    aws_instance.s3_copy(local_root, s3_root, True)
-    
     s3_script = s3_root + "/userdata/" + os.path.basename(script)
-    aws_instance.s3_copy(script, s3_script, False)
-    
-    pathes = []
-    for p in [s3_runsh, s3_script] + s3_setenv_list + s3_downloader_list + s3_uploader_list:
-        pathes.append(p.replace("s3://", "", 1).strip("/").rstrip("/"))
-    
-    if not_verify_bucket == False:
-        invalid_files = check_inputfiles_collect(pathes, [], cluster_name)
-        #invalid_files = check_inputfiles_partial(aws_instance, [s3_runsh, s3_script] + s3_setenv_list + s3_downloader_list + s3_uploader_list, [])
-        if len(invalid_files) > 0:
-            return False
+    if not upload_file(script, s3_script):
+        return False
     
     aws_instance.set_s3files(s3_runsh, s3_script, s3_setenv_list, s3_downloader_list, s3_uploader_list)
-    
     return True
 
 def _run_task(aws_instance, no, instance_id):
@@ -593,7 +638,7 @@ def main(params):
         
         # "aws-subnet-id": 
         params["aws_subnet_id"] = __split_param(params["aws_subnet_id"])
-        if len(params["aws_subnet_id"]) and not params["spot"]:
+        if len(params["aws_subnet_id"]) > 1 and not params["spot"]:
             print (ecsub.tools.error_message (params["cluster_name"], None, "multiple aws-subnet-id option is not support with ondemand-instance mode."))
             return 1
 
@@ -637,7 +682,9 @@ def main(params):
 
         # check s3-files path
         if params["not_verify_bucket"] == False:
-            (regions, invalid_pathes) = check_inputfiles(aws_instance, task_params, params["cluster_name"], params["request_payer_bucket"], params["aws_s3_bucket"])
+            regions = check_bucket_location(params["cluster_name"], task_params, params["aws_s3_bucket"])
+            if regions == None:
+                return 1
             if len(regions) > 1:
                 if params["ignore_location"]:
                     print (ecsub.tools.warning_message (params["cluster_name"], None, "your task uses multipule regions '%s'." % (",".join(regions))))
@@ -645,9 +692,7 @@ def main(params):
                     print (ecsub.tools.error_message (params["cluster_name"], None, "your task uses multipule regions '%s'." % (",".join(regions))))
                     return 1
                 
-            for r in invalid_pathes:
-                print (ecsub.tools.error_message (params["cluster_name"], None, "input '%s' is not access." % (r)))
-            if len(invalid_pathes)> 0:
+            if not check_inputfiles(params["cluster_name"], task_params, params["request_payer_bucket"], params["processes_file_check"]):
                 return 1
         
         # write task-scripts, and upload to S3
@@ -799,6 +844,7 @@ class Argments:
         self.aws_ecs_instance_role_name = "ecsInstanceRole"
         self.disk_size = 22
         self.processes = 20
+        self.processes_file_check = 10
         self.aws_security_group_id = ""
         self.aws_log_group_name = ""
         self.aws_key_name = ""

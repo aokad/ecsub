@@ -73,11 +73,15 @@ class Aws_ecsub_control:
         self.retry_od = params["retry_od"]
         
         self.task_param = []
+        default_subnet_id = ""
+        if len(params["aws_subnet_id"]) > 0:
+            default_subnet_id = params["aws_subnet_id"][0]
+            
         for i in range(task_num):
             self.task_param.append({
                 "spot": params["spot"],
                 "aws_ec2_instance_type": params["aws_ec2_instance_type_list"][0],
-                "aws_subnet_id": "",
+                "aws_subnet_id": default_subnet_id,
                 "od_price": 0,
                 "spot_az": "",
                 "spot_price": 0,

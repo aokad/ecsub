@@ -89,15 +89,16 @@ Role:
 ```
 $ ecsub submit --help
 usage: ecsub submit [-h] [--wdir path/to/dir] [--image docker/image:tag]
-                    [--use_amazon_ecr] [--shell path/to/bash]
+                    [--use-amazon-ecr] [--shell path/to/bash]
                     [--setup-container-cmd "pip install awscli"] [--dind]
                     --script path/to/script.sh --tasks path/to/tasks.tsv
                     [--task-name task-name] --aws-s3-bucket s3://output/bucket
-                    [--aws-ec2-instance-type t2.micro]
+                    [--aws-ec2-instance-type t3.micro,t2.micro]
                     [--aws-ec2-instance-type-list t3.micro,t2.micro]
+                    [--aws-ecs-instance-role-name ecsInstanceRole]
                     [--disk-size 22] [--processes 20]
-                    [--aws-security-group-id sg-ab123456]
-                    [--aws-key-name key-123ab]
+                    [--aws-security-group-id sg-ab123456,sg-ab456789]
+                    [--aws-key-name key-123ab] [--aws-log-group-name lg-name]
                     [--aws-subnet-id subnet-123456ab] [--spot] [--retry-od]
                     [--request-payer-bucket bucket-name] [--ignore-location]
                     [--not-verify-bucket]
@@ -107,7 +108,7 @@ optional arguments:
   --wdir path/to/dir    output temporary data
   --image docker/image:tag
                         docker image
-  --use_amazon_ecr      use_amazon_ecr
+  --use-amazon-ecr      use_amazon_ecr
   --shell path/to/bash  path to bash or ash in docker-container
   --setup-container-cmd "pip install awscli"
                         awscli install command
@@ -120,16 +121,21 @@ optional arguments:
                         submit name as AWS ECS cluster name
   --aws-s3-bucket s3://output/bucket
                         AWS your S3 bucket
-  --aws-ec2-instance-type t2.micro
-                        AWS instance type
-  --aws-ec2-instance-type-list t3.micro,t2.micro
+  --aws-ec2-instance-type t3.micro,t2.micro
                         AWS instance types, split with ','
+  --aws-ec2-instance-type-list t3.micro,t2.micro
+                        (Deprecated as it is to be decommissioned.) AWS
+                        instance types, split with ','
+  --aws-ecs-instance-role-name ecsInstanceRole
+                        AWS ECS instance role name
   --disk-size 22        AWS disk size (GiB)
   --processes 20        maximum multi processes
-  --aws-security-group-id sg-ab123456
-                        AWS your security_group_id
+  --aws-security-group-id sg-ab123456,sg-ab456789
+                        AWS your security_group_ids, split with ','
   --aws-key-name key-123ab
                         AWS your key pair name
+  --aws-log-group-name lg-name
+                        AWS Cloudwatch Logs Log-group-name
   --aws-subnet-id subnet-123456ab
                         AWS subnet_id
   --spot                [spot] use spot instance
