@@ -558,7 +558,12 @@ def terminate_thread(thread):
         raise SystemError("PyThreadState_SetAsyncExc failed")
         
 def main(params):
-
+    def __split_param(text):
+        formatted = text.strip()
+        if formatted == "":
+            return []
+        return formatted.split(",")
+            
     try:
         # set cluster_name
         params["cluster_name"] = params["task_name"]
@@ -567,32 +572,34 @@ def main(params):
                 + '-' \
                 + ''.join([random.choice(string.ascii_letters + string.digits) for i in range(5)])
                 
-        # check param
-        instance_type_list = params["aws_ec2_instance_type_list"].replace(" ", "")
-        if len(instance_type_list) == 0:
-            params["aws_ec2_instance_type_list"] = [params["aws_ec2_instance_type"]]
-        else:
-            params["aws_ec2_instance_type_list"] = instance_type_list.split(",")
-            
-        if params["aws_ec2_instance_type"] != "":
-            pass
-                
-        elif len(params["aws_ec2_instance_type_list"]) > 0:
-            if not params["spot"]:
-                print (ecsub.tools.error_message (params["cluster_name"], None, "--aws-ec2-instance-type-list option is not support with ondemand-instance mode."))
-                return 1
-            
-        else:
+        # "aws_ec2_instance_type"
+        instance_type_list1 = __split_param(params["aws_ec2_instance_type"])
+        instance_type_list2 = __split_param(params["aws_ec2_instance_type_list"])
+        if len(instance_type_list1) == 0 and len(instance_type_list2) == 0:
             print (ecsub.tools.error_message (params["cluster_name"], None, "One of --aws-ec2-instance-type option and --aws-ec2-instance-type-list option is required."))
             return 1
+        elif len(instance_type_list1) > 0 and len(instance_type_list2) > 0:
+            print (ecsub.tools.error_message (params["cluster_name"], None, "--aws-ec2-instance-type option and --aws-ec2-instance-type-list option cannot be specified at the same time."))
+            return 1
         
-        # "request_payer_bucket": 
-        request_payer_bucket = params["request_payer_bucket"].replace(" ", "")
-        if len(request_payer_bucket) == 0:
-            params["request_payer_bucket"] = []
+        if len(instance_type_list1) > 0:
+            params["aws_ec2_instance_type_list"] = instance_type_list1
         else:
-            params["request_payer_bucket"] = request_payer_bucket.split(",")
-            
+            params["aws_ec2_instance_type_list"] = instance_type_list2
+
+        if len(params["aws_ec2_instance_type_list"]) > 1 and not params["spot"]:
+            print (ecsub.tools.error_message (params["cluster_name"], None, "multiple instance-type option is not support with ondemand-instance mode."))
+            return 1
+        
+        # "aws-subnet-id": 
+        params["aws_subnet_id"] = __split_param(params["aws_subnet_id"])
+        if len(params["aws_subnet_id"]) and not params["spot"]:
+            print (ecsub.tools.error_message (params["cluster_name"], None, "multiple aws-subnet-id option is not support with ondemand-instance mode."))
+            return 1
+
+        # "request_payer_bucket": 
+        params["request_payer_bucket"] = __split_param(params["request_payer_bucket"])
+
         # read tasks file
         task_params = read_tasksfile(params["tasks"], params["cluster_name"])
         if task_params == None:
@@ -724,18 +731,18 @@ def main(params):
         
     except Exception as e:
         print (e)
-        print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
+        print (ecsub.tools.important_message (params["cluster_name"], None, "Wait until clear up the resources."))
         for th in thread_list:
             terminate_thread(th)
-        print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
+        print (ecsub.tools.important_message (params["cluster_name"], None, "Wait until clear up the resources."))
         aws_instance.clean_up()
         
     except KeyboardInterrupt:
         print ("KeyboardInterrupt")
-        print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
+        print (ecsub.tools.important_message (params["cluster_name"], None, "Wait until clear up the resources."))
         for th in thread_list:
             terminate_thread(th)
-        print (ecsub.tools.important_message (params["cluster_name"], None, "Wait unti clear up the resources."))
+        print (ecsub.tools.important_message (params["cluster_name"], None, "Wait until clear up the resources."))
         aws_instance.clean_up()
     
     print ("ecsub failed.")

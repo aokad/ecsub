@@ -49,8 +49,6 @@ class Aws_ecsub_control:
         
         self.aws_ami_id = ecsub.aws_config.get_ami_id()
         self.aws_ec2_instance_type_list = params["aws_ec2_instance_type_list"]
-        if self.aws_ec2_instance_type_list == ['']:
-            self.aws_ec2_instance_type_list = [params["aws_ec2_instance_type"]]
         
         self.aws_ecs_task_vcpu_default = 1
         self.aws_ecs_task_memory_default = 300
@@ -78,7 +76,8 @@ class Aws_ecsub_control:
         for i in range(task_num):
             self.task_param.append({
                 "spot": params["spot"],
-                "aws_ec2_instance_type": params["aws_ec2_instance_type"],
+                "aws_ec2_instance_type": params["aws_ec2_instance_type_list"][0],
+                "aws_subnet_id": "",
                 "od_price": 0,
                 "spot_az": "",
                 "spot_price": 0,
@@ -612,8 +611,8 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         bd_mappings_file = self._conf_path("block_device_mappings.%03d.json" % (no))
         json.dump(block_device_mappings, open(bd_mappings_file, "w"), indent=4, separators=(',', ': '))
         subnet_id = ""
-        if self.aws_subnet_id != "":
-            subnet_id = "--subnet-id %s" % (self.aws_subnet_id)
+        if self.task_param[no]["aws_subnet_id"] != "":
+            subnet_id = "--subnet-id %s" % (self.task_param[no]["aws_subnet_id"])
 
         cmd_template = "{setx};" \
             + "aws ec2 run-instances" \
@@ -714,11 +713,13 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
     def set_spot_price (self, no):
         
         availarity_zone = []
-        if  self.aws_subnet_id != "":
+        subnet_az_map = []
+        if  len(self.aws_subnet_id) > 0:
             try:
-                response = boto3.client('ec2').describe_subnets(SubnetIds=[self.aws_subnet_id])
+                response = boto3.client('ec2').describe_subnets(SubnetIds=self.aws_subnet_id)
                 for subnet in response['Subnets']:
                     availarity_zone.append(subnet['AvailabilityZone'])
+                    subnet_az_map.append({'AvailabilityZone': subnet['AvailabilityZone'], 'SubnetId': subnet['SubnetId']})
             except Exception as e:
                 print (e)
                 return False
@@ -763,6 +764,10 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         
         self.task_param[no]["spot_price"] = price["price"]
         self.task_param[no]["spot_az"] = price["az"]
+        for map in subnet_az_map:
+            if map['AvailabilityZone'] == price["az"]:
+                self.task_param[no]["aws_subnet_id"] = map['SubnetId']
+                break
         print(ecsub.tools.info_message (self.cluster_name, no, "Spot Price: $%.3f, Availality Zone: %s" % (price["price"], price["az"])))
         return True
     
@@ -866,8 +871,8 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             "UserData": userdata_text.decode()
         }
                         
-        if self.aws_subnet_id != "":
-            specification["SubnetId"] = self.aws_subnet_id
+        if self.task_param[no]["aws_subnet_id"] != "":
+            specification["SubnetId"] = self.task_param[no]["aws_subnet_id"]
         
         specification_file = self._conf_path("specification_file.%03d.json" % (no))
         json.dump(specification, open(specification_file, "w"), indent=4, separators=(',', ': '))
