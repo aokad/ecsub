@@ -1210,6 +1210,8 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                     {"Name":"instance-id", "Values": [instance_id]}
                 ]
             )
+            json_file = self._log_path("describe-spot-instance-requests.%03d" % (no))
+            json.dump(response, open(json_file, "w"), default=support_datetime_default, indent=4, separators=(',', ': '))
             if len(response['SpotInstanceRequests']) > 0:
                 if response['SpotInstanceRequests'][0]["Status"]["Code"] == 'instance-terminated-capacity-oversubscribed':
                     exit_code = -1
