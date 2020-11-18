@@ -1122,7 +1122,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             region = self.aws_region,
             cluster_name = self.cluster_name,
             log_group_name = self.log_group_name,
-            task_id = task_arn.split("/")[1]
+            task_id = task_arn.split("/")[-1]
         )
         print (ecsub.tools.message (self.cluster_name, no, [{"text": " For detail, see log-file: "}, {"text": log_html, "color": ecsub.tools.get_title_color(no)}]))
 
