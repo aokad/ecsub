@@ -53,7 +53,6 @@ class Aws_ecsub_control:
         self.aws_ecs_task_vcpu_default = 1
         self.aws_ecs_task_memory_default = 300
         self.disk_size = params["disk_size"]
-        self.root_disk_size = params["root_disk_size"]
         self.aws_subnet_id = params["aws_subnet_id"]
         self.image = params["image"]
         self.use_amazon_ecr = params["use_amazon_ecr"]
@@ -545,29 +544,13 @@ HOME=/
 */1 * * * * root /root/metricscript.sh
 */30 * * * * cat /dev/null > /var/spool/mail/root
 EOF
-
-cloud-init-per once mkfs_sdb mkfs -t ext4 /dev/sdb
-cloud-init-per once mkdir_external mkdir /external
-cloud-init-per once mount_sdb mount /dev/sdb /external
-
-echo "aws configure set aws_access_key_id "\$(aws configure get aws_access_key_id) > /external/aws_confgure.sh
-echo "aws configure set aws_secret_access_key "\$(aws configure get aws_secret_access_key) >> /external/aws_confgure.sh
-echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
 --==BOUNDARY==--
 """.format(cluster_arn = self.cluster_arn, region = self.aws_region)
     
     def _getblock_device_mappings(self):
         return [
             {
-                "DeviceName":"/dev/xvdcz",
-                "Ebs": {
-                    "VolumeSize": self.root_disk_size,
-                    "VolumeType": "gp2",
-                    "DeleteOnTermination":True
-                }
-            },
-            {
-                "DeviceName":"/dev/sdb",
+                "DeviceName":"/dev/xvda",
                 "Ebs": {
                     "VolumeSize": self.disk_size,
                     "VolumeType": "gp2",
@@ -1176,7 +1159,6 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         response["tasks"][0]["log"] = log_html
         response["tasks"][0]["instance_type"] = self.task_param[no]["aws_ec2_instance_type"]
         response["tasks"][0]["disk_size"] = self.disk_size
-        response["tasks"][0]["root_disk_size"] = self.root_disk_size
         response["tasks"][0]["no"] = no
         response["tasks"][0]["instance_id"] = instance_id
         response["tasks"][0]["subnet_id"] = subnet_id

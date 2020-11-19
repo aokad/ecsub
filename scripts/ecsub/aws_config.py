@@ -7,7 +7,9 @@ Created on Tue Mar 20 12:54:32 2018
 
 def get_ami_id():
     import boto3
-    data=boto3.client("ssm").get_parameters(Names=["/aws/service/ecs/optimized-ami/amazon-linux/recommended/image_id"])
+    data = boto3.client("ssm").get_parameters(Names=[
+        "/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id"
+    ])
     return data['Parameters'][0]['Value']
 
 def region_to_location(region):

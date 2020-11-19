@@ -128,7 +128,7 @@ optional arguments:
                         instance types, split with ','
   --aws-ecs-instance-role-name ecsInstanceRole
                         AWS ECS instance role name
-  --disk-size 22        AWS disk size (GiB)
+  --disk-size 22        Size of extra disk space in GiB for container layers and mounted volumes, excluding 30GiB for OS and docker runtime
   --processes 20        maximum multi processes
   --aws-security-group-id sg-ab123456,sg-ab456789
                         AWS your security_group_ids, split with ','
