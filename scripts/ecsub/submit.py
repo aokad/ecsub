@@ -104,7 +104,7 @@ df -h
         option = option
     ))
     
-def write_s3_scripts(task_params, payer_buckets, setenv, downloader, uploader, nounset, no):
+def write_s3_scripts(task_params, payer_buckets, setenv, downloader, uploader, no):
    
     sec_env_text = """set -e
 set +x
@@ -122,10 +122,9 @@ decrypt () {
     env_text = "set -x\n"
     dw_text = "set -x\n"
     up_text = "set -x\n"
+    
     for i in range(len(task_params["tasks"][no])):
-        if nounset and task_params["tasks"][no][i] == "":
-            continue
-
+        
         if task_params["header"][i]["type"] == "env":
             env_text += 'export %s="%s"\n' % (task_params["header"][i]["name"], task_params["tasks"][no][i])
             continue
@@ -316,7 +315,7 @@ def check_inputfiles(cluster_name, task_params, payer_buckets, job_max = 10):
         
     return False
 
-def upload_scripts(task_params, aws_instance, local_root, s3_root, script, cluster_name, shell, request_payer_bucket, not_verify_bucket, nounset):
+def upload_scripts(task_params, aws_instance, local_root, s3_root, script, cluster_name, shell, request_payer_bucket, not_verify_bucket):
 
     def upload_file (local_file, s3_path):
         s3 = boto3.resource('s3')
@@ -347,7 +346,7 @@ def upload_scripts(task_params, aws_instance, local_root, s3_root, script, clust
         uploader = local_root + "/uploader.%d.sh" % (i)
         s3_uploader = s3_root + "/uploader.%d.sh" % (i)
         
-        write_s3_scripts(task_params, request_payer_bucket, setenv, downloader, uploader, nounset, i)
+        write_s3_scripts(task_params, request_payer_bucket, setenv, downloader, uploader, i)
         if not upload_file(setenv, s3_setenv):
             return False
         if not upload_file(downloader, s3_downloader):
@@ -708,8 +707,7 @@ def main(params):
             params["cluster_name"],
             params["shell"],
             params["request_payer_bucket"],
-            params["not_verify_bucket"],
-            params["nounset"]
+            params["not_verify_bucket"]
          ):
             print (ecsub.tools.error_message (params["cluster_name"], None, "failure upload files to s3 bucket: %s." % (params["aws_s3_bucket"])))
             return 1
