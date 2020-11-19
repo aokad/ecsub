@@ -381,18 +381,8 @@ class Aws_ecsub_control:
         if ecsub.tools.is_request_payer_bucket(self.s3_runsh, self.request_payer_bucket):
             option = "--request-payer requester "
         
-        mountpoints = [
-            {
-                "sourceVolume": "scratch",
-                "containerPath": "/scratch"
-            }
-        ]
-        volumes = [
-            {
-                "name": "scratch",
-                "host": {"sourcePath": "/external"}
-            }
-        ]
+        mountpoints = []
+        volumes = []
         
         if self.dind:
             mountpoints.append(
@@ -499,27 +489,23 @@ class Aws_ecsub_control:
         return True
 
     def _userdata(self):
-        return """Content-Type: multipart/mixed; boundary="==BOUNDARY=="
-MIME-Version: 1.0
+        return """#!/bin/bash
 
---==BOUNDARY==
-Content-Type: text/cloud-boothook; charset="us-ascii"
+exec > >(tee /var/log/user-data.log|logger -t user-data -s 2>/dev/console) 2>&1
+yum install -y python3-pip
+pip3 install awscli
+which aws
+which pip3
 
-# Install nfs-utils
-cloud-init-per once yum_update yum update -y
-cloud-init-per once install_tr yum install -y tr
-cloud-init-per once install_td yum install -y td
-cloud-init-per once install_python27_pip yum install -y python27-pip
-cloud-init-per once install_awscli pip install awscli
-
-cloud-init-per once ecs_option echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
+echo "ECS_CLUSTER={cluster_arn}" >> /etc/ecs/ecs.config
 
 cat << EOF > /root/metricscript.sh
+set -x
 AWSREGION={region}
 AWSINSTANCEID=\$(curl -ss http://169.254.169.254/latest/meta-data/instance-id)
 ECS_CLUSTER_NAME=\$(cat /etc/ecs/ecs.config | grep ^ECS_CLUSTER | cut -d "/" -f 2)
 
-disk_util=\$(df /external | awk '/external/ {{print \$5}}' | awk -F% '{{print \$1}}')
+disk_util=\$(df / | tail -n 1 | awk '// {{print \$5}}' | awk -F% '{{print \$1}}')
 aws cloudwatch put-metric-data --value \$disk_util --namespace ECSUB --unit Percent --metric-name DataStorageUtilization --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
 
 sts=(\$(vmstat | tail -n 1))
@@ -528,7 +514,7 @@ aws cloudwatch put-metric-data --value \$cpu_util --namespace ECSUB --unit Perce
 
 # new
 mem_total=\$(free | awk '/Mem:/ {{print \$2}}')
-mem_used=\$(free | awk '/buffers\/cache:/ {{print \$3}}')
+mem_used=\$(free | awk '/Mem:/ {{print \$3}}')
 mem_util=\$(awk 'BEGIN{{ printf "%.0f\\n", '\$mem_used'*100/'\$mem_total' }}')
 aws cloudwatch put-metric-data --value \$mem_util --namespace ECSUB --unit Percent --metric-name MemoryUtilization --region \$AWSREGION --dimensions InstanceId=\$AWSINSTANCEID,ClusterName=\$ECS_CLUSTER_NAME
 
@@ -544,7 +530,6 @@ HOME=/
 */1 * * * * root /root/metricscript.sh
 */30 * * * * cat /dev/null > /var/spool/mail/root
 EOF
---==BOUNDARY==--
 """.format(cluster_arn = self.cluster_arn, region = self.aws_region)
     
     def _getblock_device_mappings(self):

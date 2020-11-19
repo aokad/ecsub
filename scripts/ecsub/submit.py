@@ -669,8 +669,8 @@ def main(params):
         os.makedirs(params["wdir"] + "/script")
 
         # disk-size
-        if params["disk_size"] < 1:
-            print (ecsub.tools.error_message (params["cluster_name"], None, "disk-size %d is smaller than expected size 1GB." % (params["disk_size"])))
+        if params["disk_size"] < 0:
+            print (ecsub.tools.error_message (params["cluster_name"], None, "disk-size %d is smaller than expected size 0GB." % (params["disk_size"])))
             return 1
             
         # Adding requested disk size to the default EBS size of Amazon Linux 2
@@ -848,7 +848,7 @@ class Argments:
         self.aws_ec2_instance_type = ""
         self.aws_ec2_instance_type_list = ""
         self.aws_ecs_instance_role_name = "ecsInstanceRole"
-        self.disk_size = 22
+        self.disk_size = 0
         self.processes = 20
         self.processes_file_check = 10
         self.aws_security_group_id = ""

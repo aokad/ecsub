@@ -93,7 +93,7 @@ class SubmitTest(unittest.TestCase):
             "--script", "./tests/run-wordcount.sh",
             "--tasks", "./tests/test-wordcount.tsv",
             "--aws-ec2-instance-type", "t2.micro",
-            "--disk-size", "0",
+            "--disk-size", "1",
             "--aws-s3-bucket", "s3://travisci-work/wordcount/output/",
             "--aws-log-group-name", "ecsub-travis2",
         ]
@@ -112,7 +112,7 @@ class SubmitTest(unittest.TestCase):
         options = [
             "download",
             "--wdir", self.WDIR,
-            "--log-group-prefix", "ecsub-travis"
+            "--log-group-prefix", "ecsub-travis1"
         ]
         subprocess.check_call(['python', 'ecsub', 'logs'] + options)
             
@@ -121,7 +121,7 @@ class SubmitTest(unittest.TestCase):
         options = [
             "download",
             "--wdir", self.WDIR,
-            "--log-group-prefix", "ecsub-travis",
+            "--log-group-prefix", "ecsub-travis1",
             "--tail"
         ]
         subprocess.check_call(['python', 'ecsub', 'logs'] + options)
