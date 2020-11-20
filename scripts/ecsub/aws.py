@@ -56,7 +56,7 @@ class Aws_ecsub_control:
         self.aws_subnet_id = params["aws_subnet_id"]
         self.image = params["image"]
         self.use_amazon_ecr = params["use_amazon_ecr"]
-        
+
         self.task_definition_arn = ""
         self.cluster_arn = ""
 
@@ -70,6 +70,7 @@ class Aws_ecsub_control:
         
         self.spot = params["spot"]
         self.retry_od = params["retry_od"]
+        self.skip_price = params["skip_price"]
         
         self.task_param = []
         default_subnet_id = ""
@@ -647,7 +648,11 @@ EOF
     def set_ondemand_price (self, no):
         
         self.task_param[no]["spot"] = False
-                       
+        
+        if self.skip_price:
+            self.task_param[no]["od_price"] = 0
+            return True
+        
         response = boto3.client('pricing', region_name = "ap-south-1").get_products(
             ServiceCode='AmazonEC2',
             Filters = [
@@ -730,7 +735,7 @@ EOF
             print(ecsub.tools.error_message (self.cluster_name, no, "failure describe_spot_price_history."))
             return False
         
-        if price["price"] > self.task_param[no]["od_price"] * 0.98:
+        if self.task_param[no]["od_price"] > 0 and price["price"] > self.task_param[no]["od_price"] * 0.98:
             print(ecsub.tools.error_message (self.cluster_name, no, "spot price $%.3f is close to ondemand price $%.3f." % (price["price"], self.task_param[no]["od_price"])))
             return False
         
@@ -778,7 +783,11 @@ EOF
                 return float(values[-1])
             
             return 0
-    
+
+        if self.skip_price:
+            self.ebs_price = 0
+            return True
+
         price = _get_ebs_price (self.aws_region, "gp2")
         
         if price == 0:

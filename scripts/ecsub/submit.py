@@ -860,7 +860,8 @@ class Argments:
         self.request_payer_bucket = ""
         self.ignore_location = False
         self.not_verify_bucket = False
-        
+        self.skip_price = False
+
         # The followings are not optional
         self.setx = "set -x"
         self.flyaway = False
