@@ -1238,15 +1238,17 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         
         cmd_template = "{setx};" \
             + "aws ec2 terminate-instances --instance-ids {ec2InstanceId} > {log}"
-
         cmd = cmd_template.format(
             setx = self.setx,
             log = log_file,
             ec2InstanceId = instance_id
         )
         self._subprocess_call(cmd, no)
+        instance_id_list = instance_id.split(" ")
+        if len(instance_id_list) > 1:
+            return
 
-        response = boto3.client("ec2").describe_instance_status(InstanceIds=[instance_id])
+        response = boto3.client("ec2").describe_instance_status(InstanceIds=instance_id_list)
         max_attempts = int(600/self.waiter_delay)
         print_interval = int(600/self.waiter_delay)
         wait_counter = print_interval
@@ -1261,7 +1263,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                 print(ecsub.tools.info_message (self.cluster_name, no, "wait terminated instance-ids=%s" % (instance_id)))
                 wait_counter = 0
             time.sleep(self.waiter_delay)
-            response = boto3.client("ec2").describe_instance_status(InstanceIds=[instance_id])
+            response = boto3.client("ec2").describe_instance_status(InstanceIds=instance_id_list)
             wait_counter += 1
             
     def cancel_spot_instance_requests (self, no = None, instance_id = None, spot_req_id = None):
@@ -1307,9 +1309,10 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             except Exception:
                 pass
         
+        STEP = 100
         instance_ids = list(set(instance_ids))
-        if len(instance_ids) > 0:
-            self.terminate_instances (" ".join(instance_ids))
+        for i in range(0, len(instance_ids), STEP):
+            self.terminate_instances (" ".join(instance_ids[i:i+STEP]))
         
         # cancel_spot_instance_requests
         req_ids = []
@@ -1319,9 +1322,10 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                 req_ids.append(log["SpotInstanceRequests"][0]["SpotInstanceRequestId"])
             except Exception:
                 pass
-            
-        if len(req_ids) > 0:
-            self.cancel_spot_instance_requests (spot_req_id = " ".join(req_ids))
+        
+        req_ids = list(set(req_ids))
+        for i in range(0, len(req_ids), STEP):
+            self.cancel_spot_instance_requests (spot_req_id = " ".join(req_ids[i:i+STEP]))
             
         # delete cluster
         if self.cluster_arn != "":
