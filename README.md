@@ -97,11 +97,12 @@ usage: ecsub submit [-h] [--wdir path/to/dir] [--image docker/image:tag]
                     [--aws-ec2-instance-type-list t3.micro,t2.micro]
                     [--aws-ecs-instance-role-name ecsInstanceRole]
                     [--disk-size 22] [--processes 20]
+                    [--processes-file-check 10]
                     [--aws-security-group-id sg-ab123456,sg-ab456789]
                     [--aws-key-name key-123ab] [--aws-log-group-name lg-name]
                     [--aws-subnet-id subnet-123456ab] [--spot] [--retry-od]
                     [--request-payer-bucket bucket-name] [--ignore-location]
-                    [--not-verify-bucket]
+                    [--not-verify-bucket] [--skip-price] [--waiter-delay 15]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -128,8 +129,12 @@ optional arguments:
                         instance types, split with ','
   --aws-ecs-instance-role-name ecsInstanceRole
                         AWS ECS instance role name
-  --disk-size 22        Size of extra disk space in GiB for container layers and mounted volumes, excluding 30GiB for OS and docker runtime
+  --disk-size 22        Size of extra disk space in GiB for container layers
+                        and mounted volumes, excluding 30GiB for OS and docker
+                        runtime
   --processes 20        maximum multi processes
+  --processes-file-check 10
+                        maximum multi processes for exists of iput files
   --aws-security-group-id sg-ab123456,sg-ab456789
                         AWS your security_group_ids, split with ','
   --aws-key-name key-123ab
@@ -145,6 +150,8 @@ optional arguments:
                         in requester pays buckets. Split with ','
   --ignore-location     Ignore differences in location
   --not-verify-bucket   Do not verify input pathes
+  --skip-price          Skip get pricing from aws
+  --waiter-delay 15     The amount of time(sec) to boto3 waiter
 ```
 
 For example,
