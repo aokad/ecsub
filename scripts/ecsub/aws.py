@@ -17,6 +17,7 @@ import ecsub.aws_config
 import ecsub.tools
 import glob
 import base64
+import pprint
 
 class Aws_ecsub_control:
 
@@ -57,7 +58,8 @@ class Aws_ecsub_control:
         self.aws_subnet_id = params["aws_subnet_id"]
         self.image = params["image"]
         self.use_amazon_ecr = params["use_amazon_ecr"]
-        
+        self.waiter_delay = params["waiter_delay"]
+
         self.task_definition_arn = ""
         self.cluster_arn = ""
 
@@ -578,27 +580,27 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
     
     def _wait_run_instance(self, instance_id, no):
         
+        response = boto3.client("ec2").describe_instance_status(InstanceIds=[instance_id])
+        max_attempts = int(1800/self.waiter_delay)
+        print_interval = int(600/self.waiter_delay)
+        wait_counter = print_interval
         if instance_id != "":
-            cmd_template = "{setx}; aws ec2 wait instance-running --instance-ids {INSTANCE_ID}"
-            cmd = cmd_template.format(
-                setx = self.setx,
-                INSTANCE_ID = instance_id
-            )
-            self._subprocess_call(cmd, no)
-    
-            cmd_template = "{setx}; aws ec2 wait instance-status-ok --include-all-instances --instance-ids {INSTANCE_ID}"
-            cmd = cmd_template.format(
-                setx = self.setx,
-                INSTANCE_ID = instance_id
-            )
-            self._subprocess_call(cmd, no)
-    
-            for i in range(3):
+            for i in range(max_attempts):
+                try:
+                    if  response['InstanceStatuses'][0]['InstanceState']['Name'] == "running" \
+                    and response['InstanceStatuses'][0]['InstanceStatus']['Status'] == "ok":
+                        return True
+                except Exception:
+                    pass
+                
+                if wait_counter == print_interval:
+                    print(ecsub.tools.info_message (self.cluster_name, no, "wait instance-status-ok instance-ids=%s" % (instance_id)))
+                    wait_counter = 0
+                    
+                time.sleep(self.waiter_delay)
                 response = boto3.client("ec2").describe_instance_status(InstanceIds=[instance_id])
-                if response['InstanceStatuses'][0]['InstanceStatus']['Status'] == "ok":
-                    return True
-                self._subprocess_call(cmd, no)
-    
+                wait_counter += 1
+                
         print(ecsub.tools.error_message (self.cluster_name, no, "Failure run instance."))
         return False
     
@@ -919,12 +921,18 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
                         return instance_id
                 
                 elif state == "open" and status_code == 'pending-evaluation':
-                    cmd_template = "{setx}; aws ec2 wait spot-instance-request-fulfilled --spot-instance-request-ids {REQUEST_ID}"
-                    cmd = cmd_template.format(
-                        setx = self.setx,
-                        REQUEST_ID = request_id
-                    )
-                    self._subprocess_call(cmd, no)
+                    max_attempts = int(600/self.waiter_delay)
+                    print_interval = int(600/self.waiter_delay)
+                    wait_counter = print_interval
+                    for j in range(max_attempts):
+                        if wait_counter == print_interval:
+                            print(ecsub.tools.info_message (self.cluster_name, no, "spot-instance-request-fulfilled spot-instance-request-ids=%s" % (request_id)))
+                            wait_counter = 0
+                        time.sleep(self.waiter_delay)
+                        response2 = self._describe_spot_instances(no, request_id = request_id)
+                        wait_counter += 1
+                        if response2['Status']['Code'] == "fulfilled":
+                            break
                 else:
                     print(ecsub.tools.error_message (self.cluster_name, no, "Failure request-spot-instances. [Status] %s [Code] %s [Message] %s" % 
                         (response['State'],
@@ -1145,31 +1153,32 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             return (0, None)
             
         # wait to task-stop
-        cmd_template = "{setx};aws ecs wait tasks-stopped --tasks {TASK_ARN} --cluster {CLUSTER_ARN}"
-
-        cmd = cmd_template.format(
-            setx = self.setx,
-            CLUSTER_ARN = self.cluster_arn,
-            TASK_ARN = task_arn
-        )
-        self._subprocess_call(cmd, no)
-
+        #print(ecsub.tools.info_message (self.cluster_name, no, "wait tasks-stopped task=%s" % (task_arn)))
         response = boto3.client('ecs').describe_tasks(
             cluster=self.cluster_arn,
             tasks=[task_arn]
         )
+        print_interval = int(600/self.waiter_delay)
+        wait_counter = print_interval
         while True:
-            if len(response["tasks"]) == 0:
-                return (exit_code, log_file)
-            if response["tasks"][0]['lastStatus'] != "RUNNING":
-                break
+            try:
+                if response["tasks"][0]['lastStatus'] == 'STOPPED':
+                    break
+            except Exception:
+                pprint.pprint(response["tasks"])
+                pass
 
-            self._subprocess_call(cmd, no)
+            if wait_counter == print_interval:
+                print(ecsub.tools.info_message (self.cluster_name, no, "wait tasks-stopped task=%s" % (task_arn)))
+                wait_counter = 0
+                
+            time.sleep(self.waiter_delay)
             response = boto3.client('ecs').describe_tasks(
                 cluster=self.cluster_arn,
                 tasks=[task_arn]
             )
-
+            wait_counter += 1
+        
         # check exit code
         log_file = self._log_path("describe-tasks.%03d" % (no))
 
@@ -1224,9 +1233,11 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
         if no != None:
             log_file = self._log_path("terminate-instances.%03d" % (no))
 
+        if instance_id == "":
+            return
+        
         cmd_template = "{setx};" \
-            + "aws ec2 terminate-instances --instance-ids {ec2InstanceId} > {log};" \
-            + "aws ec2 wait instance-terminated --instance-ids {ec2InstanceId}"
+            + "aws ec2 terminate-instances --instance-ids {ec2InstanceId} > {log}"
 
         cmd = cmd_template.format(
             setx = self.setx,
@@ -1234,7 +1245,25 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             ec2InstanceId = instance_id
         )
         self._subprocess_call(cmd, no)
-    
+
+        response = boto3.client("ec2").describe_instance_status(InstanceIds=[instance_id])
+        max_attempts = int(600/self.waiter_delay)
+        print_interval = int(600/self.waiter_delay)
+        wait_counter = print_interval
+        for i in range(max_attempts):
+            try:
+                if response['InstanceStatuses'][0]['InstanceState']['Name'] == "terminated":
+                    break
+            except Exception:
+                break
+
+            if wait_counter == print_interval:
+                print(ecsub.tools.info_message (self.cluster_name, no, "wait terminated instance-ids=%s" % (instance_id)))
+                wait_counter = 0
+            time.sleep(self.waiter_delay)
+            response = boto3.client("ec2").describe_instance_status(InstanceIds=[instance_id])
+            wait_counter += 1
+            
     def cancel_spot_instance_requests (self, no = None, instance_id = None, spot_req_id = None):
         
         log_file = self._log_path("cancel-spot-instance-requests")
@@ -1278,6 +1307,7 @@ echo "aws configure set region "\$AWSREGION >> /external/aws_confgure.sh
             except Exception:
                 pass
         
+        instance_ids = list(set(instance_ids))
         if len(instance_ids) > 0:
             self.terminate_instances (" ".join(instance_ids))
         

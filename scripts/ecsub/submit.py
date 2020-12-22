@@ -373,6 +373,7 @@ def _run_task(aws_instance, no, instance_id):
     
     try:
         (exit_code, task_log) = aws_instance.run_task(no, instance_id)
+        #print([exit_code, task_log])
         #if exit_code == 127:
         #    system_error = True
     
@@ -854,7 +855,8 @@ class Argments:
         self.request_payer_bucket = ""
         self.ignore_location = False
         self.not_verify_bucket = False
-        
+        self.waiter_delay = 15
+
         # The followings are not optional
         self.root_disk_size = 22
         self.setx = "set -x"
