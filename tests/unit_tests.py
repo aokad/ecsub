@@ -59,7 +59,7 @@ class SubmitTest(unittest.TestCase):
             "--image", "python:2-alpine3.6",
             "--shell", "ash",
             "--script", "./tests/run-wordcount.sh",
-            "--tasks", "./tests/test-wordcount.tsv",
+            "--tasks", "./tests/test-wordcount3.tsv",
             "--aws-ec2-instance-type", "t2.micro",
             "--disk-size", "1",
             "--aws-s3-bucket", "s3://travisci-work/wordcount/output/",

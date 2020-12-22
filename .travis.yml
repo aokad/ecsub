@@ -37,11 +37,11 @@ before_script:
 script:
   - pip install awscli boto3
   - python setup.py build install
-  - if [ ${SUBMIT} == 1 ]; then python setup.py test; fi
+  - if [ ${SUBMIT} == 1 ]; then python -m unittest discover -s ./tests -p unit_tests.py; fi
   - if [ ${SUBMIT} == 0 ]; then python -m unittest discover -s ./tests -p unit_tests_short.py; fi
 
 notifications:
   emails:
-    - aiokada@hgc.jp
+    - aokada@ncc.go.jp
   on_success: change
   on_failure: always

@@ -56,6 +56,5 @@ setup(name='ecsub',
       # -*- Entry points: -*-
       """,
       package_data = {
-      },
-      test_suite = 'unit_tests.suite'
+      }
 )
