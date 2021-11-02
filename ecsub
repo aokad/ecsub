@@ -58,6 +58,7 @@ def main():
         submit_parser.add_argument("--not-verify-bucket", help = "Do not verify input pathes", action = 'store_true')
         submit_parser.add_argument("--skip-price", help = "Skip get pricing from aws", action = 'store_true')
         submit_parser.add_argument("--waiter-delay", metavar = 15, help = "The amount of time(sec) to boto3 waiter", type = int, default = default.waiter_delay)
+        submit_parser.add_argument("--goofys", help = "set privileged parameter to aws ecs container", action = 'store_true')
         return submit_parser
         
     ##########

@@ -152,6 +152,7 @@ optional arguments:
   --not-verify-bucket   Do not verify input pathes
   --skip-price          Skip get pricing from aws
   --waiter-delay 15     The amount of time(sec) to boto3 waiter
+  --goofys              Set privileged parameter to aws ecs container
 ```
 
 For example,

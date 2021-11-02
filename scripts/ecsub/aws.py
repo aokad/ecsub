@@ -72,6 +72,7 @@ class Aws_ecsub_control:
         self.spot = params["spot"]
         self.retry_od = params["retry_od"]
         self.skip_price = params["skip_price"]
+        self.goofys = params["goofys"]
         
         self.task_param = []
         default_subnet_id = ""
@@ -399,7 +400,21 @@ class Aws_ecsub_control:
                     "host": {"sourcePath": "/var/run/docker.sock"}
                 }
             )
-        
+
+        if self.goofys:
+            mountpoints.append(
+                {
+                    "sourceVolume": "dev_fuse",
+                    "containerPath": "/dev/fuse"
+                }
+            )
+            volumes.append(
+                {
+                    "name": "dev_fuse",
+                    "host": {"sourcePath": "/dev/fuse"}
+                }
+            )
+            
         containerDefinitions = {
             "containerDefinitions": [
                 {
@@ -451,6 +466,7 @@ class Aws_ecsub_control:
             ],
             "taskRoleArn": ECSTASKROLE,
             "family": self.cluster_name,
+            "privileged": self.goofys,
             "volumes": volumes
         }
 

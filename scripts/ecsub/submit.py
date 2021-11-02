@@ -863,6 +863,7 @@ class Argments:
         self.not_verify_bucket = False
         self.skip_price = False
         self.waiter_delay = 15
+        self.goofys = False
 
         # The followings are not optional
         self.setx = "set -x"
