@@ -422,6 +422,7 @@ class Aws_ecsub_control:
                     "image": IMAGE_ARN,
                     "cpu": self.aws_ecs_task_vcpu_default,
                     "memory": self.aws_ecs_task_memory_default,
+                    "privileged": self.goofys,
                     "essential": True,
                       "entryPoint": [
                           self.shell,
@@ -466,7 +467,6 @@ class Aws_ecsub_control:
             ],
             "taskRoleArn": ECSTASKROLE,
             "family": self.cluster_name,
-            "privileged": self.goofys,
             "volumes": volumes
         }
 
