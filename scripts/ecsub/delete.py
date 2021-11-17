@@ -10,7 +10,7 @@ import ecsub.submit
 import ecsub.tools
 import glob
 
-def main(params):
+def main(params, metrics = False):
     
     params["wdir"] =  params["wdir"].rstrip("/")
     summary_list = glob.glob("%s/%s/log/summary.*.log" % (params["wdir"], params["task_name"]))
@@ -24,7 +24,7 @@ def main(params):
     summary = json.load(open(summary_list[0]))
 
     params["cluster_name"] = summary["ClusterName"]
-    
+    params["aws_ec2_instance_type_list"] = [""]
     aws_instance = ecsub.aws.Aws_ecsub_control(params, 1)
     aws_instance.aws_key_name = summary["KeyName"]
     aws_instance.aws_security_group_id = summary["SecurityGroupId"]
@@ -32,14 +32,17 @@ def main(params):
     aws_instance.aws_key_auto = summary["AutoKey"]
     aws_instance.cluster_arn = summary["ClusterArn"]
     aws_instance.task_definition_arn = summary["TaskDefinitionAn"]
-    
+
     aws_instance.clean_up()
-    
+
+    if metrics:
+        for no in range(len(summary_list)):
+            ecsub.metrics.entry_point(aws_instance.wdir, no)
     return 0
     
 def entry_point(args):
     params = ecsub.submit.set_param(args)
-    return main(params)
+    return main(params, args.metrics)
     
 if __name__ == "__main__":
     pass

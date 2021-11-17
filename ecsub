@@ -99,6 +99,7 @@ def main():
     delete_parser = subparsers.add_parser("delete", help = "delete job")
     delete_parser.add_argument("task_name", metavar = "task-name", help = "task name", type = str)
     delete_parser.add_argument("--wdir", metavar = "path/to/dir", help = "{PATH} when 'ecsub submit --wdir {PATH}'", type = str, default = "./")
+    delete_parser.add_argument("--metrics", help = "get metrics", action = 'store_true')
     delete_parser.set_defaults(func = delete.entry_point)
     
     ##########

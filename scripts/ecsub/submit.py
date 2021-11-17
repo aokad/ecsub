@@ -547,7 +547,8 @@ def submit_task(ctx, thread_name, aws_instance, no, task_params, spot):
         "Wdir": aws_instance.wdir,
         "Jobs":[]
     }
-    if aws_instance.flyaway == False:
+    #if aws_instance.flyaway == False:
+    if True:
         _save_summary_file(task_summary, False)
 
     if spot:
