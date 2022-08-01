@@ -1,5 +1,5 @@
-[![Build Status](https://travis-ci.org/aokad/ecsub.svg?branch=master)](https://travis-ci.org/aokad/ecsub)
-![Python](https://img.shields.io/badge/python-2.7%20%7C%203.5%20%7C%203.6%20%7C%203.7-blue.svg)
+[![Github Workflow](https://github.com/aokad/ecsub/actions/workflows/main.yml/badge.svg)](https://github.com/aokad/ecsub/actions)
+![Python](https://img.shields.io/badge/python-2.7%20%7C%203.6%20%7C%203.7%20%7C%203.8%20%7C%203.9-blue.svg)
 
 # ecsub
 
