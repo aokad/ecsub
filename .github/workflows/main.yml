@@ -1,0 +1,36 @@
+name: UnitTest
+
+on:
+  push:
+    branches: [ "master" ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9"]
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        pip install awscli boto3
+        pip install .
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    - name: Test with unittest
+      run: |
+        mkdir ~/.aws
+        echo "[default]" > ~/.aws/credentials
+        echo "aws_access_key_id = ${{ secrets.DOCKER_USERNAME }}" >> ~/.aws/credentials
+        echo "aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> ~/.aws/credentials
+        echo "[default]" > ~/.aws/config
+        echo "region = us-east-2" >> ~/.aws/config
+        echo "output = json" >> ~/.aws/config
+        python -m unittest discover -s ./tests -p unit_tests.py
