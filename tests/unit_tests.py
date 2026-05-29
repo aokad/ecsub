@@ -42,7 +42,7 @@ class SubmitTest(unittest.TestCase):
     def test2_01_submit(self):
         options = [
             "--wdir", self.WDIR,
-            "--image", "python:2-alpine3.6",
+            "--image", "python:3.12-alpine",
             "--shell", "ash",
             "--script", "./tests/run-wordcount.sh",
             "--tasks", "./tests/test-wordcount.tsv",
@@ -56,7 +56,7 @@ class SubmitTest(unittest.TestCase):
     def test2_02_submit(self):
         options = [
             "--wdir", self.WDIR,
-            "--image", "python:2-alpine3.6",
+            "--image", "python:3.12-alpine",
             "--shell", "ash",
             "--script", "./tests/run-wordcount.sh",
             "--tasks", "./tests/test-wordcount3.tsv",
@@ -71,7 +71,7 @@ class SubmitTest(unittest.TestCase):
     def test2_03_submit(self):
         options = [
             "--wdir", self.WDIR,
-            "--image", "python:2-alpine3.6",
+            "--image", "python:3.12-alpine",
             "--shell", "ash",
             "--script", "./tests/run-wordcount.sh",
             "--tasks", "./tests/test-wordcount.tsv",
@@ -88,7 +88,7 @@ class SubmitTest(unittest.TestCase):
     def test2_04_submit(self):
         options = [
             "--wdir", self.WDIR,
-            "--image", "python:2-alpine3.6",
+            "--image", "python:3.12-alpine",
             "--shell", "ash",
             "--script", "./tests/run-wordcount.sh",
             "--tasks", "./tests/test-wordcount.tsv",
