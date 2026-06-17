@@ -841,7 +841,7 @@ class Argments:
         self.image = "python:2.7.14"
         self.use_amazon_ecr = False
         self.shell = "/bin/bash"
-        self.setup_container_cmd = "apt update; apt install -y python-pip; pip install awscli --upgrade; aws configure list"
+        self.setup_container_cmd = ecsub.aws.DEFAULT_SETUP_CONTAINER_CMD
         self.dind = False
         self.script = ""
         self.tasks = ""

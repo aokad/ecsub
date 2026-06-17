@@ -19,6 +19,24 @@ import glob
 import base64
 import pprint
 
+
+DEFAULT_SETUP_CONTAINER_CMD = """sh -c "
+if ! command -v aws > /dev/null; then
+    apt update;
+    if ! command -v curl > /dev/null; then
+        apt install -y --no-install-recommends curl
+    fi
+    if ! command -v unzip > /dev/null; then
+        apt install -y --no-install-recommends unzip
+    fi
+    curl -sS -o "awscliv2.zip" "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip"
+    unzip -q awscliv2.zip
+    ./aws/install
+    rm -rf aws awscliv2.zip
+fi
+aws --version" """
+
+
 class Aws_ecsub_control:
 
     def __init__(self, params, task_num):
@@ -42,7 +60,7 @@ class Aws_ecsub_control:
         self.shell = params["shell"]
         self.setup_container_cmd = params["setup_container_cmd"]
         if self.setup_container_cmd == "":
-            self.setup_container_cmd = "apt update; apt install -y python-pip; pip install awscli --upgrade; aws configure list"
+            self.setup_container_cmd = DEFAULT_SETUP_CONTAINER_CMD
         self.dind = params["dind"]
         self.log_group_name = params["aws_log_group_name"]
         if self.log_group_name == "":
